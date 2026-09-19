@@ -169,12 +169,13 @@ io.on('connection', (socket) => {
   // Private message
   socket.on('chat:message', ({ roomId, text, from }) => {
     if (!rooms[roomId]) return;
-    const msg = { text: String(text).slice(0, 2000), from, ts: Date.now() };
+    const msg = { roomId, text: String(text).slice(0, 2000), from, ts: Date.now() };
     rooms[roomId].messages.push(msg);
     savedChats[roomId] = rooms[roomId];
     persistChats();
     io.to(roomId).emit('chat:message', msg);
 
+    // Auto-show WhatsApp button if customer mentions "whatsapp"
     if (from === 'customer' && /\bwhatsapp\b|\bwa\b/i.test(text)) {
       rooms[roomId].waInvited = true;
       io.to(roomId).emit('wa:show');
@@ -182,10 +183,11 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Structured request
+  // Structured request (delay / refund / baggage / complaint)
   socket.on('chat:request', ({ roomId, type, payload }) => {
     if (!rooms[roomId]) return;
     const msg = {
+      roomId,
       text: `[${type.toUpperCase()}] ${JSON.stringify(payload)}`,
       from: 'customer',
       ts: Date.now(),
@@ -198,18 +200,18 @@ io.on('connection', (socket) => {
     io.to(AGENT_ROOM).emit('customer:update', rooms[roomId]);
   });
 
-  // Agent invites to WhatsApp
-  socket.on('wa:invite', ({ roomId }) => {// Typing indicators (broadcast only to the other side)
-socket.on('typing', ({ roomId, from }) => {
-  if (!rooms[roomId]) return;
-  socket.to(roomId).emit('typing', { from });
-});
+  // Typing indicators
+  socket.on('typing', ({ roomId, from }) => {
+    if (!rooms[roomId]) return;
+    socket.to(roomId).emit('typing', { from });
+  });
+  socket.on('typing:stop', ({ roomId, from }) => {
+    if (!rooms[roomId]) return;
+    socket.to(roomId).emit('typing:stop', { from });
+  });
 
-socket.on('typing:stop', ({ roomId, from }) => {
-  if (!rooms[roomId]) return;
-  socket.to(roomId).emit('typing:stop', { from });
-});
-
+  // Agent invites customer to WhatsApp
+  socket.on('wa:invite', ({ roomId }) => {
     if (!rooms[roomId]) return;
     rooms[roomId].waInvited = true;
     savedChats[roomId] = rooms[roomId];
