@@ -3,6 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const session = require('express-session');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,7 +15,8 @@ const AGENT_USER = 'Customer Support';
 const AGENT_PASS = 'Support7264';        // <-- CHANGE THIS NOW
 const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 const AGENT_ROOM = 'agent-room';
-const WA_NUMBER = '254743993329';        // WhatsApp Business number (no +, no spaces)
+const WA_NUMBER = '254743993329';
+const DB_FILE = path.join(__dirname, 'chats.json');
 // ----------------------------
 
 app.use(express.json());
@@ -25,6 +28,21 @@ app.use(session({
   cookie: { httpOnly: true, sameSite: 'lax', maxAge: 12 * 60 * 60 * 1000 }
 }));
 app.use(express.static('public'));
+
+// ---------- PERSISTENCE ----------
+let savedChats = {};
+try {
+  if (fs.existsSync(DB_FILE)) {
+    savedChats = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) || {};
+  }
+} catch (e) { savedChats = {}; }
+
+function persistChats() {
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(savedChats, null, 2));
+  } catch (e) { console.error('persist error', e); }
+}
+setInterval(persistChats, 15000);
 
 // ---------- AUTH ----------
 function requireAuth(req, res, next) {
@@ -49,15 +67,14 @@ app.get('/api/me', (req, res) => {
   res.json({ agent: !!(req.session && req.session.agent) });
 });
 
-// Protect the agent console
 app.get('/agent', requireAuth, (req, res) => {
   res.sendFile(__dirname + '/public/agent.html');
 });
 
 // ---------- CHAT STATE ----------
-const rooms = {};  // roomId -> { roomId, customerId, name, topic, agentId, joinedAt, messages: [], waInvited }
+const rooms = {};  // roomId -> chat object (live)
 
-// ---------- WHATSAPP (server-side, rate-limited) ----------
+// ---------- WHATSAPP ----------
 const waHits = new Map();
 const WA_LIMIT = 3;
 const WA_WINDOW = 60 * 1000;
@@ -93,7 +110,7 @@ io.on('connection', (socket) => {
 
   // Customer starts private chat
   socket.on('customer:join', ({ name, topic }) => {
-    const roomId = 'room-' + socket.id;
+    const roomId = 'room-' + crypto.randomBytes(6).toString('hex');
     rooms[roomId] = {
       roomId,
       customerId: socket.id,
@@ -104,10 +121,33 @@ io.on('connection', (socket) => {
       messages: [],
       waInvited: false
     };
+    savedChats[roomId] = rooms[roomId];
+    persistChats();
     socket.join(roomId);
     socket.emit('chat:ready', { roomId });
     io.to(AGENT_ROOM).emit('customer:new', rooms[roomId]);
     console.log('new customer:', roomId, name, topic);
+  });
+
+  // Customer reconnects after refresh
+  socket.on('customer:reconnect', ({ roomId }) => {
+    const chat = rooms[roomId] || savedChats[roomId];
+    if (!chat) {
+      socket.emit('chat:notfound');
+      return;
+    }
+    rooms[roomId] = chat;
+    rooms[roomId].customerId = socket.id;
+    socket.join(roomId);
+    socket.emit('chat:restored', {
+      roomId,
+      messages: chat.messages || [],
+      name: chat.name,
+      topic: chat.topic,
+      waInvited: chat.waInvited || false
+    });
+    io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
+    console.log('customer reconnected:', roomId);
   });
 
   // Agent registers
@@ -131,9 +171,10 @@ io.on('connection', (socket) => {
     if (!rooms[roomId]) return;
     const msg = { text: String(text).slice(0, 2000), from, ts: Date.now() };
     rooms[roomId].messages.push(msg);
+    savedChats[roomId] = rooms[roomId];
+    persistChats();
     io.to(roomId).emit('chat:message', msg);
 
-    // Auto-show WhatsApp button if customer mentions whatsapp
     if (from === 'customer' && /\bwhatsapp\b|\bwa\b/i.test(text)) {
       rooms[roomId].waInvited = true;
       io.to(roomId).emit('wa:show');
@@ -141,7 +182,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Structured airline request (delay / refund / baggage / complaint)
+  // Structured request
   socket.on('chat:request', ({ roomId, type, payload }) => {
     if (!rooms[roomId]) return;
     const msg = {
@@ -151,14 +192,18 @@ io.on('connection', (socket) => {
       structured: { type, payload }
     };
     rooms[roomId].messages.push(msg);
+    savedChats[roomId] = rooms[roomId];
+    persistChats();
     io.to(roomId).emit('chat:message', msg);
     io.to(AGENT_ROOM).emit('customer:update', rooms[roomId]);
   });
 
-  // Agent invites customer to WhatsApp
+  // Agent invites to WhatsApp
   socket.on('wa:invite', ({ roomId }) => {
     if (!rooms[roomId]) return;
     rooms[roomId].waInvited = true;
+    savedChats[roomId] = rooms[roomId];
+    persistChats();
     io.to(roomId).emit('wa:show');
     io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
   });
@@ -168,16 +213,21 @@ io.on('connection', (socket) => {
     if (!rooms[roomId]) return;
     io.to(roomId).emit('chat:ended');
     delete rooms[roomId];
+    delete savedChats[roomId];
+    persistChats();
     io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
   });
 
   socket.on('disconnect', () => {
     for (const id in rooms) {
       if (rooms[id].customerId === socket.id) {
-        delete rooms[id];
-        io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
+        rooms[id].customerId = null;
+        rooms[id].agentId = null;
+        savedChats[id] = rooms[id];
       }
     }
+    persistChats();
+    io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
   });
 });
 
