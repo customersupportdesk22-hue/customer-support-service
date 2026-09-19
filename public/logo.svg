@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" fill="none">
+  <rect x="8" y="8" width="56" height="56" rx="14" fill="#003D82"/>
+  <path d="M22 34v-6a14 14 0 0 1 28 0v6" stroke="#F2B705" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+  <rect x="18" y="32" width="8" height="14" rx="3" fill="#F2B705"/>
+  <rect x="38" y="32" width="8" height="14" rx="3" fill="#F2B705"/>
+  <path d="M46 44v4a4 4 0 0 1-4 4h-6" stroke="#F2B705" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <text x="80" y="40" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="700" fill="#003D82" letter-spacing="-0.4">Customer Support</text>
+  <text x="81" y="58" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#F2B705" letter-spacing="2">SERVICE</text>
+</svg>
