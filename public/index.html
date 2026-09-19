@@ -19,7 +19,9 @@
   .brand svg{height:44px;width:auto}
   .status-pill{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--success);
                background:#E6F5EC;padding:6px 12px;border-radius:999px;font-weight:600}
+  .status-pill.offline{color:#C53030;background:#FEE2E2}
   .status-dot{width:8px;height:8px;background:var(--success);border-radius:50%;animation:pulse 2s infinite}
+  .status-pill.offline .status-dot{background:#C53030;animation:none}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
   .hero{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;padding:36px 28px 60px;text-align:center}
@@ -39,7 +41,6 @@
   button{background:var(--primary);color:#fff;border:none;padding:12px 22px;border-radius:10px;
          font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
   button:hover{background:var(--primary-dark)}
-  button.ghost{background:#EDF2F7;color:var(--primary)}
 
   #chat{height:380px;overflow-y:auto;background:#F8FAFC;border-radius:10px;padding:16px;margin-bottom:12px;border:1px solid #EDF2F7}
   .msg{padding:10px 14px;border-radius:14px;margin-bottom:8px;max-width:78%;font-size:14px;
@@ -47,6 +48,8 @@
   .me{background:var(--primary);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
   .them{background:#EDF2F7;border-bottom-left-radius:4px}
   .sys{background:#FFF7E0;color:#7A5C00;font-size:12.5px;border-left:3px solid var(--accent)}
+
+  .typing{font-size:12px;color:var(--muted);font-style:italic;padding:4px 6px;height:18px}
 
   .actions{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
   .actions button{background:#EDF2F7;color:var(--primary);font-size:13px;padding:10px;text-align:left;
@@ -85,7 +88,7 @@
       <text x="81" y="58" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#F2B705" letter-spacing="2">SERVICE</text>
     </svg>
   </a>
-  <div class="status-pill"><span class="status-dot"></span>Agents online 24/7</div>
+  <div class="status-pill" id="statusPill"><span class="status-dot"></span><span id="statusText">Connecting…</span></div>
 </header>
 
 <section class="hero">
@@ -122,6 +125,7 @@
       <button class="wa-btn" onclick="openWhatsApp()">💬 Chat on WhatsApp</button>
     </div>
     <div id="chat"></div>
+    <div class="typing" id="typingIndicator"></div>
     <div class="actions" id="actions">
       <button onclick="quick('Flight delay / cancellation')">✈️ Flight delay</button>
       <button onclick="quick('Refund request')">💰 Refund request</button>
@@ -142,10 +146,38 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io();
+// Force reconnection — critical for phones and flaky networks
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 3000,
+  timeout: 20000,
+  transports: ['websocket', 'polling']
+});
+
 let roomId;
+let myName = 'Guest';
+let myTopic = 'General';
 let restored = false;
 const chat = document.getElementById('chat');
+const inputEl = document.getElementById('msg');
+
+// Connection status indicator
+socket.on('connect', () => {
+  document.getElementById('statusPill').classList.remove('offline');
+  document.getElementById('statusText').textContent = 'Agents online 24/7';
+
+  // If we already had a room, re-join it (handles disconnect + reconnect)
+  if (roomId) {
+    socket.emit('customer:reconnect', { roomId });
+  }
+});
+
+socket.on('disconnect', () => {
+  document.getElementById('statusPill').classList.add('offline');
+  document.getElementById('statusText').textContent = 'Reconnecting…';
+});
 
 document.getElementById('wantEmail').addEventListener('change', e => {
   document.getElementById('email').style.display = e.target.checked ? 'block' : 'none';
@@ -160,14 +192,14 @@ function addMsg(text, who){
 }
 
 function start(){
-  const name = document.getElementById('name').value.trim() || 'Guest';
-  const topic = document.getElementById('topic').value;
-  socket.emit('customer:join', { name, topic });
+  myName = document.getElementById('name').value.trim() || 'Guest';
+  myTopic = document.getElementById('topic').value;
+  socket.emit('customer:join', { name: myName, topic: myTopic });
 
   document.getElementById('login').style.display='none';
   document.getElementById('room').style.display='block';
   addMsg('Connecting you to a Customer Support Service agent…', 'them');
-  addMsg('Topic: ' + topic, 'sys');
+  addMsg('Topic: ' + myTopic, 'sys');
 }
 
 socket.on('chat:ready', ({ roomId:id }) => {
@@ -176,14 +208,47 @@ socket.on('chat:ready', ({ roomId:id }) => {
 });
 
 socket.on('agent:joined', () => addMsg('A Customer Support agent has joined your private chat.', 'sys'));
-socket.on('chat:message', ({ text, from }) => addMsg(text, from==='customer'?'me':'them'));
+
+// THE MOST IMPORTANT HANDLER — messages appear instantly
+socket.on('chat:message', ({ text, from }) => {
+  addMsg(text, from === 'customer' ? 'me' : 'them');
+  // clear typing indicator when a message arrives
+  document.getElementById('typingIndicator').textContent = '';
+});
 
 socket.on('chat:ended', () => {
   addMsg('This chat has ended. Thank you for contacting us.', 'sys');
   try { localStorage.removeItem('css_room'); } catch(e){}
 });
 
-// Reconnect on refresh — try to restore previous chat
+// Typing indicator
+let typingTimer = null;
+function notifyTyping(){
+  if (!roomId) return;
+  socket.emit('typing', { roomId, from: 'customer' });
+}
+if (inputEl) {
+  inputEl.addEventListener('input', () => {
+    notifyTyping();
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+      socket.emit('typing:stop', { roomId });
+    }, 1500);
+  });
+}
+
+socket.on('typing', ({ from }) => {
+  if (from === 'agent') {
+    document.getElementById('typingIndicator').textContent = 'Customer Support is typing…';
+  }
+});
+socket.on('typing:stop', ({ from }) => {
+  if (from === 'agent') {
+    document.getElementById('typingIndicator').textContent = '';
+  }
+});
+
+// Reconnect / restore on refresh
 window.addEventListener('load', () => {
   let saved = null;
   try { saved = localStorage.getItem('css_room'); } catch(e){}
@@ -215,17 +280,16 @@ socket.on('chat:notfound', () => {
   document.getElementById('room').style.display='none';
 });
 
-// Show WhatsApp button when agent invites
 socket.on('wa:show', () => {
   document.getElementById('waBar').classList.add('show');
   addMsg('WhatsApp option enabled — tap the green button above to continue there.', 'sys');
 });
 
 function send(){
-  const input = document.getElementById('msg');
-  if(!input.value.trim() || !roomId) return;
-  socket.emit('chat:message', { roomId, text: input.value, from: 'customer' });
-  input.value = '';
+  if(!inputEl.value.trim() || !roomId) return;
+  socket.emit('chat:message', { roomId, text: inputEl.value, from: 'customer' });
+  socket.emit('typing:stop', { roomId });
+  inputEl.value = '';
 }
 
 function quick(topic){
@@ -246,11 +310,7 @@ async function openWhatsApp(){
     const r = await fetch('/api/whatsapp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roomId,
-        name: document.getElementById('name').value.trim() || 'Guest',
-        topic: document.getElementById('topic').value
-      })
+      body: JSON.stringify({ roomId, name: myName, topic: myTopic })
     });
     const data = await r.json();
     if (data.ok) window.open(data.url, '_blank');
