@@ -56,7 +56,6 @@
   .input-row{display:flex;gap:8px}
   .input-row input{margin-bottom:0;flex:1}
 
-  /* WhatsApp button (appears on request) */
   .wa-bar{display:none;justify-content:flex-end;margin-bottom:8px}
   .wa-bar.show{display:flex}
   .wa-btn{background:#25D366;color:#fff;border:none;padding:8px 14px;border-radius:999px;
@@ -145,6 +144,7 @@
 <script>
 const socket = io();
 let roomId;
+let restored = false;
 const chat = document.getElementById('chat');
 
 document.getElementById('wantEmail').addEventListener('change', e => {
@@ -162,10 +162,7 @@ function addMsg(text, who){
 function start(){
   const name = document.getElementById('name').value.trim() || 'Guest';
   const topic = document.getElementById('topic').value;
-  const email = document.getElementById('wantEmail').checked
-    ? document.getElementById('email').value.trim() : null;
-
-  socket.emit('customer:join', { name, topic, email });
+  socket.emit('customer:join', { name, topic });
 
   document.getElementById('login').style.display='none';
   document.getElementById('room').style.display='block';
@@ -173,10 +170,50 @@ function start(){
   addMsg('Topic: ' + topic, 'sys');
 }
 
-socket.on('chat:ready', ({ roomId:id }) => { roomId = id; });
+socket.on('chat:ready', ({ roomId:id }) => {
+  roomId = id;
+  try { localStorage.setItem('css_room', id); } catch(e){}
+});
+
 socket.on('agent:joined', () => addMsg('A Customer Support agent has joined your private chat.', 'sys'));
 socket.on('chat:message', ({ text, from }) => addMsg(text, from==='customer'?'me':'them'));
-socket.on('chat:ended', () => addMsg('This chat has ended. Thank you for contacting us.', 'sys'));
+
+socket.on('chat:ended', () => {
+  addMsg('This chat has ended. Thank you for contacting us.', 'sys');
+  try { localStorage.removeItem('css_room'); } catch(e){}
+});
+
+// Reconnect on refresh — try to restore previous chat
+window.addEventListener('load', () => {
+  let saved = null;
+  try { saved = localStorage.getItem('css_room'); } catch(e){}
+  if (saved && !restored) {
+    restored = true;
+    socket.emit('customer:reconnect', { roomId: saved });
+  }
+});
+
+socket.on('chat:restored', ({ roomId:id, messages, name, topic, waInvited }) => {
+  roomId = id;
+  document.getElementById('login').style.display='none';
+  document.getElementById('room').style.display='block';
+  chat.innerHTML = '';
+  addMsg('Welcome back! Your chat has been restored.', 'sys');
+  (messages || []).forEach(m => {
+    if (m.structured) {
+      addMsg('[' + m.structured.type + ']', 'sys');
+    } else {
+      addMsg(m.text, m.from === 'customer' ? 'me' : 'them');
+    }
+  });
+  if (waInvited) document.getElementById('waBar').classList.add('show');
+});
+
+socket.on('chat:notfound', () => {
+  try { localStorage.removeItem('css_room'); } catch(e){}
+  document.getElementById('login').style.display='block';
+  document.getElementById('room').style.display='none';
+});
 
 // Show WhatsApp button when agent invites
 socket.on('wa:show', () => {
@@ -203,7 +240,6 @@ function quick(topic){
   addMsg('You selected: ' + topic + ' — an agent will assist you with the details.', 'sys');
 }
 
-// Open WhatsApp via server (number stays hidden)
 async function openWhatsApp(){
   if(!roomId) return;
   try {
