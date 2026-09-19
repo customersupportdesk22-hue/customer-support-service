@@ -26,6 +26,7 @@
   .item .topic{font-size:11.5px;color:#9AA9C4}
   .item .badge{font-size:10px;padding:3px 7px;border-radius:999px;background:var(--success);font-weight:600}
   .item .badge.wait{background:#7B8FAF}
+  .item .badge.offline{background:#4A5878}
   .item .wa-badge{background:#25D366;font-size:10px;padding:3px 7px;border-radius:999px;font-weight:600;margin-left:4px;color:#fff}
   .logout{margin:12px;padding:10px;background:#1E3A6B;border:none;color:#fff;border-radius:8px;
           font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
@@ -104,6 +105,7 @@ socket.emit('agent:register');
 
 let activeRoom = null;
 let customers = [];
+let activeMessages = [];
 
 socket.on('customer:list', (list) => { customers = list; refresh(); });
 socket.on('customer:new', (c) => {
@@ -120,10 +122,16 @@ function refresh(){
     const d = document.createElement('div');
     d.className = 'item' + (activeRoom === c.roomId ? ' active' : '');
     const waBadge = c.waInvited ? '<span class="wa-badge">WA</span>' : '';
+
+    let status = 'WAITING';
+    let badgeClass = 'wait';
+    if (!c.customerId) { status = 'OFFLINE'; badgeClass = 'offline'; }
+    else if (c.agentId) { status = 'LIVE'; badgeClass = ''; }
+
     d.innerHTML = `<div class="row">
                      <span class="name">${escapeHtml(c.name)}</span>
                      ${waBadge}
-                     <span class="badge ${c.agentId ? '' : 'wait'}">${c.agentId ? 'LIVE' : 'WAITING'}</span>
+                     <span class="badge ${badgeClass}">${status}</span>
                    </div>
                    <div class="topic">${escapeHtml(c.topic || 'General')}</div>`;
     d.onclick = () => openChat(c);
@@ -170,7 +178,6 @@ function send(){
   const text = input.value.trim();
   if(!text || !activeRoom) return;
 
-  // Special command: /wa invites the customer to WhatsApp
   if (/^\/wa$/i.test(text)) {
     socket.emit('wa:invite', { roomId: activeRoom });
     input.value = '';
@@ -188,6 +195,7 @@ function inviteWhatsApp(){
 
 function endChat(){
   if(!activeRoom) return;
+  if(!confirm('End this chat for the customer?')) return;
   socket.emit('chat:end', { roomId: activeRoom });
   customers = customers.filter(c => c.roomId !== activeRoom);
   activeRoom = null;
