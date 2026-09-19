@@ -145,8 +145,8 @@
 </footer>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/notify.js"></script>
 <script>
-// Force reconnection — critical for phones and flaky networks
 const socket = io({
   reconnection: true,
   reconnectionAttempts: Infinity,
@@ -163,15 +163,10 @@ let restored = false;
 const chat = document.getElementById('chat');
 const inputEl = document.getElementById('msg');
 
-// Connection status indicator
 socket.on('connect', () => {
   document.getElementById('statusPill').classList.remove('offline');
   document.getElementById('statusText').textContent = 'Agents online 24/7';
-
-  // If we already had a room, re-join it (handles disconnect + reconnect)
-  if (roomId) {
-    socket.emit('customer:reconnect', { roomId });
-  }
+  if (roomId) socket.emit('customer:reconnect', { roomId });
 });
 
 socket.on('disconnect', () => {
@@ -192,6 +187,7 @@ function addMsg(text, who){
 }
 
 function start(){
+  CSS_RequestPush();
   myName = document.getElementById('name').value.trim() || 'Guest';
   myTopic = document.getElementById('topic').value;
   socket.emit('customer:join', { name: myName, topic: myTopic });
@@ -209,11 +205,19 @@ socket.on('chat:ready', ({ roomId:id }) => {
 
 socket.on('agent:joined', () => addMsg('A Customer Support agent has joined your private chat.', 'sys'));
 
-// THE MOST IMPORTANT HANDLER — messages appear instantly
 socket.on('chat:message', ({ text, from }) => {
   addMsg(text, from === 'customer' ? 'me' : 'them');
-  // clear typing indicator when a message arrives
   document.getElementById('typingIndicator').textContent = '';
+
+  // Notify customer only when agent sent it and tab isn't visible
+  if (from === 'agent' && document.visibilityState !== 'visible') {
+    CSS_Notify('Customer Support', text.slice(0, 60), { push: true });
+  }
+});
+
+window.addEventListener('focus', () => CSS_StopFlash());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') CSS_StopFlash();
 });
 
 socket.on('chat:ended', () => {
@@ -232,7 +236,7 @@ if (inputEl) {
     notifyTyping();
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
-      socket.emit('typing:stop', { roomId });
+      socket.emit('typing:stop', { roomId, from: 'customer' });
     }, 1500);
   });
 }
@@ -248,7 +252,6 @@ socket.on('typing:stop', ({ from }) => {
   }
 });
 
-// Reconnect / restore on refresh
 window.addEventListener('load', () => {
   let saved = null;
   try { saved = localStorage.getItem('css_room'); } catch(e){}
@@ -288,7 +291,7 @@ socket.on('wa:show', () => {
 function send(){
   if(!inputEl.value.trim() || !roomId) return;
   socket.emit('chat:message', { roomId, text: inputEl.value, from: 'customer' });
-  socket.emit('typing:stop', { roomId });
+  socket.emit('typing:stop', { roomId, from: 'customer' });
   inputEl.value = '';
 }
 
