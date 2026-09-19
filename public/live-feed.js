@@ -1,11 +1,11 @@
-// public/live-feed.js — Honest activity popup
-// Shows trust panel once, then real events only.
+// public/live-feed.js — Honest activity popup with live dot
 
 (function(){
-  const TRUST_MESSAGE = 'Online 24/7 · Response under 1 minute';
-  const VISIBLE_MS = 5000;            // each popup stays 5s
-  const MIN_GAP_MS = 6000;            // min gap between popups
-  const TRUST_DELAY_MS = 3000;        // delay before trust panel appears
+  const TRUST_TITLE = 'Customer Support Service';
+  const TRUST_MESSAGE = '24/7 · Response usually under 1 minute';
+  const VISIBLE_MS = 5000;
+  const MIN_GAP_MS = 6000;
+  const TRUST_DELAY_MS = 3000;
 
   let lastShownAt = 0;
   let queue = [];
@@ -24,7 +24,27 @@
     return c;
   }
 
-  function showPopup(emoji, text){
+  // Animated live dot (green, pulsing)
+  function liveDot(){
+    return '<span style="display:inline-block;width:10px;height:10px;' +
+           'background:#2F855A;border-radius:50%;' +
+           'box-shadow:0 0 0 0 rgba(47,133,90,.7);' +
+           'animation:__live_pulse 1.8s infinite;flex-shrink:0;"></span>';
+  }
+
+  function ensureKeyframes(){
+    if (document.getElementById('__live_kf')) return;
+    const style = document.createElement('style');
+    style.id = '__live_kf';
+    style.textContent = '@keyframes __live_pulse{' +
+      '0%{box-shadow:0 0 0 0 rgba(47,133,90,.7)}' +
+      '70%{box-shadow:0 0 0 10px rgba(47,133,90,0)}' +
+      '100%{box-shadow:0 0 0 0 rgba(47,133,90,0)}}';
+    document.head.appendChild(style);
+  }
+
+  function showPopup(iconHtml, text){
+    ensureKeyframes();
     const c = ensureContainer();
     const el = document.createElement('div');
     el.style.cssText =
@@ -34,7 +54,7 @@
       'max-width:340px;display:flex;align-items:center;gap:10px;' +
       'transform:translateY(20px);opacity:0;' +
       'transition:transform .35s ease,opacity .35s ease;';
-    el.innerHTML = '<span style="font-size:18px">' + emoji + '</span><span>' + text + '</span>';
+    el.innerHTML = iconHtml + '<span>' + text + '</span>';
     c.appendChild(el);
 
     requestAnimationFrame(() => {
@@ -53,8 +73,8 @@
     return (Date.now() - lastShownAt) >= MIN_GAP_MS;
   }
 
-  function pushEvent(emoji, text){
-    queue.push({ emoji, text });
+  function pushEvent(iconHtml, text){
+    queue.push({ iconHtml, text });
     drain();
   }
 
@@ -68,25 +88,25 @@
     const next = queue.shift();
     showing = true;
     lastShownAt = Date.now();
-    showPopup(next.emoji, next.text);
+    showPopup(next.iconHtml, next.text);
     setTimeout(() => { showing = false; drain(); }, VISIBLE_MS + 500);
   }
 
   function showTrustPanel(){
     if (trustShown) return;
     trustShown = true;
-    pushEvent('✅', '<b>Customer Support Service</b><br>' + TRUST_MESSAGE);
+    pushEvent(liveDot(), '<b>' + TRUST_TITLE + '</b><br>' + TRUST_MESSAGE);
   }
 
   const EVENT_MAP = {
-    join:      ['💬', 'A customer just started a chat'],
-    refund:    ['💰', 'A refund request was submitted'],
-    delay:     ['✈️', 'A flight delay case was opened'],
-    baggage:   ['🧳', 'A baggage issue was reported'],
-    complaint: ['📢', 'A complaint was filed'],
-    change:    ['🔄', 'A flight change was requested'],
-    status:    ['🛫', 'A flight status enquiry was made'],
-    resolved:  ['✅', 'A customer chat was resolved']
+    join:      ['<span style="font-size:18px">💬</span>', 'A customer just started a chat'],
+    refund:    ['<span style="font-size:18px">💰</span>', 'A refund request was submitted'],
+    delay:     ['<span style="font-size:18px">✈️</span>', 'A flight delay case was opened'],
+    baggage:   ['<span style="font-size:18px">🧳</span>', 'A baggage issue was reported'],
+    complaint: ['<span style="font-size:18px">📢</span>', 'A complaint was filed'],
+    change:    ['<span style="font-size:18px">🔄</span>', 'A flight change was requested'],
+    status:    ['<span style="font-size:18px">🛫</span>', 'A flight status enquiry was made'],
+    resolved:  ['<span style="font-size:18px">✅</span>', 'A customer chat was resolved']
   };
 
   window.CSS_LiveFeed = {
@@ -110,6 +130,5 @@
     }
   };
 
-  // Auto-trigger trust panel after a short delay
   setTimeout(showTrustPanel, TRUST_DELAY_MS);
 })();
