@@ -1,17 +1,17 @@
 // public/live-feed.js — Honest activity popup
-// Shows a trust panel + real events only. No fabricated activity. Ever.
+// Shows trust panel once, then real events only.
 
 (function(){
   const TRUST_MESSAGE = 'Online 24/7 · Response under 1 minute';
-  const SHOW_TRUST_AFTER_MS = 3000;   // show trust panel 3s after page load
   const VISIBLE_MS = 5000;            // each popup stays 5s
   const MIN_GAP_MS = 6000;            // min gap between popups
+  const TRUST_DELAY_MS = 3000;        // delay before trust panel appears
 
   let lastShownAt = 0;
   let queue = [];
   let showing = false;
+  let trustShown = false;
 
-  // ---- container ----
   function ensureContainer(){
     let c = document.getElementById('__live_feed');
     if (c) return c;
@@ -24,7 +24,6 @@
     return c;
   }
 
-  // ---- popup ----
   function showPopup(emoji, text){
     const c = ensureContainer();
     const el = document.createElement('div');
@@ -73,12 +72,12 @@
     setTimeout(() => { showing = false; drain(); }, VISIBLE_MS + 500);
   }
 
-  // ---- trust panel (once per visit, always true) ----
   function showTrustPanel(){
+    if (trustShown) return;
+    trustShown = true;
     pushEvent('✅', '<b>Customer Support Service</b><br>' + TRUST_MESSAGE);
   }
 
-  // ---- real event mapping ----
   const EVENT_MAP = {
     join:      ['💬', 'A customer just started a chat'],
     refund:    ['💰', 'A refund request was submitted'],
@@ -90,23 +89,18 @@
     resolved:  ['✅', 'A customer chat was resolved']
   };
 
-  // ---- public API ----
   window.CSS_LiveFeed = {
-    // Called when the server broadcasts a real event
     onEvent: function(type){
       const m = EVENT_MAP[type];
       if (!m) return;
       pushEvent(m[0], m[1]);
     },
-    // Called on page load — shows only the honest trust panel
     showTrust: showTrustPanel,
-    // Loads any recent real events from the server (last 30 min)
     loadRecent: async function(){
       try {
         const r = await fetch('/api/activity');
         const data = await r.json();
         if (!data.events || !data.events.length) return;
-        // Show up to 3 most recent, oldest first
         const recent = data.events.slice(-3);
         recent.forEach(e => {
           const m = EVENT_MAP[e.type];
@@ -115,4 +109,7 @@
       } catch(e){}
     }
   };
+
+  // Auto-trigger trust panel after a short delay
+  setTimeout(showTrustPanel, TRUST_DELAY_MS);
 })();
