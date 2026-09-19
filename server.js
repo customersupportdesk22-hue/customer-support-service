@@ -199,7 +199,17 @@ io.on('connection', (socket) => {
   });
 
   // Agent invites to WhatsApp
-  socket.on('wa:invite', ({ roomId }) => {
+  socket.on('wa:invite', ({ roomId }) => {// Typing indicators (broadcast only to the other side)
+socket.on('typing', ({ roomId, from }) => {
+  if (!rooms[roomId]) return;
+  socket.to(roomId).emit('typing', { from });
+});
+
+socket.on('typing:stop', ({ roomId, from }) => {
+  if (!rooms[roomId]) return;
+  socket.to(roomId).emit('typing:stop', { from });
+});
+
     if (!rooms[roomId]) return;
     rooms[roomId].waInvited = true;
     savedChats[roomId] = rooms[roomId];
