@@ -1,16 +1,16 @@
-// public/live-feed.js — Honest activity popup with live dot
+// public/live-feed.js — Sticky trust panel + real events
 
 (function(){
   const TRUST_TITLE = 'Customer Support Service';
   const TRUST_MESSAGE = '24/7 · Response usually under 1 minute';
-  const VISIBLE_MS = 5000;
-  const MIN_GAP_MS = 6000;
   const TRUST_DELAY_MS = 3000;
+  const EVENT_VISIBLE_MS = 6000;   // how long a real event stays before trust returns
+  const MIN_GAP_MS = 3000;
 
   let lastShownAt = 0;
-  let queue = [];
-  let showing = false;
   let trustShown = false;
+  let currentPopup = null;
+  let revertTimer = null;
 
   function ensureContainer(){
     let c = document.getElementById('__live_feed');
@@ -24,7 +24,6 @@
     return c;
   }
 
-  // Animated live dot (green, pulsing)
   function liveDot(){
     return '<span style="display:inline-block;width:10px;height:10px;' +
            'background:#2F855A;border-radius:50%;' +
@@ -43,8 +42,7 @@
     document.head.appendChild(style);
   }
 
-  function showPopup(iconHtml, text){
-    ensureKeyframes();
+  function buildPopup(){
     const c = ensureContainer();
     const el = document.createElement('div');
     el.style.cssText =
@@ -54,48 +52,24 @@
       'max-width:340px;display:flex;align-items:center;gap:10px;' +
       'transform:translateY(20px);opacity:0;' +
       'transition:transform .35s ease,opacity .35s ease;';
-    el.innerHTML = iconHtml + '<span>' + text + '</span>';
     c.appendChild(el);
-
-    requestAnimationFrame(() => {
-      el.style.transform = 'translateY(0)';
-      el.style.opacity = '1';
-    });
-
-    setTimeout(() => {
-      el.style.transform = 'translateY(20px)';
-      el.style.opacity = '0';
-      setTimeout(() => el.remove(), 400);
-    }, VISIBLE_MS);
+    return el;
   }
 
-  function canShowNow(){
-    return (Date.now() - lastShownAt) >= MIN_GAP_MS;
-  }
-
-  function pushEvent(iconHtml, text){
-    queue.push({ iconHtml, text });
-    drain();
-  }
-
-  function drain(){
-    if (showing) return;
-    if (!queue.length) return;
-    if (!canShowNow()) {
-      setTimeout(drain, MIN_GAP_MS - (Date.now() - lastShownAt));
-      return;
+  function render(iconHtml, text){
+    ensureKeyframes();
+    if (!currentPopup) {
+      currentPopup = buildPopup();
+      requestAnimationFrame(() => {
+        currentPopup.style.transform = 'translateY(0)';
+        currentPopup.style.opacity = '1';
+      });
     }
-    const next = queue.shift();
-    showing = true;
-    lastShownAt = Date.now();
-    showPopup(next.iconHtml, next.text);
-    setTimeout(() => { showing = false; drain(); }, VISIBLE_MS + 500);
+    currentPopup.innerHTML = iconHtml + '<span>' + text + '</span>';
   }
 
-  function showTrustPanel(){
-    if (trustShown) return;
-    trustShown = true;
-    pushEvent(liveDot(), '<b>' + TRUST_TITLE + '</b><br>' + TRUST_MESSAGE);
+  function showTrust(){
+    render(liveDot(), '<b>' + TRUST_TITLE + '</b><br>' + TRUST_MESSAGE);
   }
 
   const EVENT_MAP = {
@@ -109,26 +83,41 @@
     resolved:  ['<span style="font-size:18px">✅</span>', 'A customer chat was resolved']
   };
 
+  function showEvent(type){
+    const m = EVENT_MAP[type];
+    if (!m) return;
+    const now = Date.now();
+    if (now - lastShownAt < MIN_GAP_MS) {
+      // too soon — queue for later
+      setTimeout(() => showEvent(type), MIN_GAP_MS);
+      return;
+    }
+    lastShownAt = now;
+    render(m[0], m[1]);
+    // after a while, revert to the trust panel
+    clearTimeout(revertTimer);
+    revertTimer = setTimeout(showTrust, EVENT_VISIBLE_MS);
+  }
+
   window.CSS_LiveFeed = {
-    onEvent: function(type){
-      const m = EVENT_MAP[type];
-      if (!m) return;
-      pushEvent(m[0], m[1]);
-    },
-    showTrust: showTrustPanel,
+    onEvent: showEvent,
+    showTrust: showTrust,
     loadRecent: async function(){
       try {
         const r = await fetch('/api/activity');
         const data = await r.json();
         if (!data.events || !data.events.length) return;
-        const recent = data.events.slice(-3);
-        recent.forEach(e => {
-          const m = EVENT_MAP[e.type];
-          if (m) pushEvent(m[0], m[1]);
-        });
+        const recent = data.events.slice(-1);
+        recent.forEach(e => showEvent(e.type));
       } catch(e){}
     }
   };
 
-  setTimeout(showTrustPanel, TRUST_DELAY_MS);
+  // Show trust panel after a short delay, and keep it visible
+  setTimeout(() => {
+    if (!trustShown) {
+      trustShown = true;
+      showTrust();
+    }
+  }, TRUST_DELAY_MS);
 })();
