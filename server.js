@@ -74,6 +74,25 @@ app.get('/agent', requireAuth, (req, res) => {
 // ---------- CHAT STATE ----------
 const rooms = {};
 
+// ---------- REAL ACTIVITY LOG (honest events only) ----------
+// Keeps the last 20 REAL events. No fake entries. Ever.
+const recentEvents = [];
+const MAX_EVENTS = 20;
+
+function logEvent(type, message) {
+  const evt = { type, message, ts: Date.now() };
+  recentEvents.push(evt);
+  if (recentEvents.length > MAX_EVENTS) recentEvents.shift();
+  // Broadcast to every connected visitor so they see real activity
+  io.emit('activity:new', evt);
+}
+
+app.get('/api/activity', (req, res) => {
+  // Return only events from the last 30 minutes
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  res.json({ events: recentEvents.filter(e => e.ts >= cutoff) });
+});
+
 // ---------- WHATSAPP ----------
 const waHits = new Map();
 const WA_LIMIT = 3;
@@ -126,16 +145,16 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socket.emit('chat:ready', { roomId });
     io.to(AGENT_ROOM).emit('customer:new', rooms[roomId]);
+
+    // REAL EVENT
+    logEvent('join', '💬 A customer just started a chat');
     console.log('new customer:', roomId, name, topic);
   });
 
-  // Customer reconnects after refresh
+  // Customer reconnects
   socket.on('customer:reconnect', ({ roomId }) => {
     const chat = rooms[roomId] || savedChats[roomId];
-    if (!chat) {
-      socket.emit('chat:notfound');
-      return;
-    }
+    if (!chat) { socket.emit('chat:notfound'); return; }
     rooms[roomId] = chat;
     rooms[roomId].customerId = socket.id;
     socket.join(roomId);
@@ -147,16 +166,13 @@ io.on('connection', (socket) => {
       waInvited: chat.waInvited || false
     });
     io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
-    console.log('customer reconnected:', roomId);
   });
 
-  // Agent registers
   socket.on('agent:register', () => {
     socket.join(AGENT_ROOM);
     socket.emit('customer:list', Object.values(rooms));
   });
 
-  // Agent joins a specific customer's room
   socket.on('agent:join', ({ roomId }) => {
     if (!rooms[roomId]) return;
     socket.join(roomId);
@@ -166,7 +182,6 @@ io.on('connection', (socket) => {
     io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
   });
 
-  // Private message
   socket.on('chat:message', ({ roomId, text, from }) => {
     if (!rooms[roomId]) return;
     const msg = { roomId, text: String(text).slice(0, 2000), from, ts: Date.now() };
@@ -175,7 +190,6 @@ io.on('connection', (socket) => {
     persistChats();
     io.to(roomId).emit('chat:message', msg);
 
-    // Auto-show WhatsApp button if customer mentions "whatsapp"
     if (from === 'customer' && /\bwhatsapp\b|\bwa\b/i.test(text)) {
       rooms[roomId].waInvited = true;
       io.to(roomId).emit('wa:show');
@@ -183,7 +197,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Structured request (delay / refund / baggage / complaint)
+  // Structured requests → these also produce REAL events
   socket.on('chat:request', ({ roomId, type, payload }) => {
     if (!rooms[roomId]) return;
     const msg = {
@@ -198,9 +212,20 @@ io.on('connection', (socket) => {
     persistChats();
     io.to(roomId).emit('chat:message', msg);
     io.to(AGENT_ROOM).emit('customer:update', rooms[roomId]);
+
+    // REAL EVENT — only fires when the customer actually submits a request
+    const eventMap = {
+      'Refund request':           ['refund',    '💰 A refund request was submitted'],
+      'Flight delay / cancellation': ['delay',  '✈️ A flight delay case was opened'],
+      'Baggage issue':            ['baggage',   '🧳 A baggage issue was reported'],
+      'Complaint':                ['complaint', '📢 A complaint was filed'],
+      'Change or cancel flight':  ['change',    '🔄 A flight change was requested'],
+      'Flight status':            ['status',    '🛫 A flight status enquiry was made']
+    };
+    const evt = eventMap[type];
+    if (evt) logEvent(evt[0], evt[1]);
   });
 
-  // Typing indicators
   socket.on('typing', ({ roomId, from }) => {
     if (!rooms[roomId]) return;
     socket.to(roomId).emit('typing', { from });
@@ -210,7 +235,6 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('typing:stop', { from });
   });
 
-  // Agent invites customer to WhatsApp
   socket.on('wa:invite', ({ roomId }) => {
     if (!rooms[roomId]) return;
     rooms[roomId].waInvited = true;
@@ -220,7 +244,6 @@ io.on('connection', (socket) => {
     io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
   });
 
-  // End chat
   socket.on('chat:end', ({ roomId }) => {
     if (!rooms[roomId]) return;
     io.to(roomId).emit('chat:ended');
@@ -228,6 +251,9 @@ io.on('connection', (socket) => {
     delete savedChats[roomId];
     persistChats();
     io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
+
+    // REAL EVENT
+    logEvent('resolved', '✅ A customer chat was resolved');
   });
 
   socket.on('disconnect', () => {
