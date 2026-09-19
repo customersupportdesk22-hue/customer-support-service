@@ -10,9 +10,10 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 // ---------- CONFIG ----------
 const AGENT_USER = 'Customer Support';
-const AGENT_PASS = 'Support7264';        // <-- CHANGE AFTER DEPLOY
+const AGENT_PASS = 'Support7264';        // <-- CHANGE THIS NOW
 const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 const AGENT_ROOM = 'agent-room';
+const WA_NUMBER = '254743993329';        // WhatsApp Business number (no +, no spaces)
 // ----------------------------
 
 app.use(express.json());
@@ -21,7 +22,7 @@ app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'lax', maxAge: 12 * 60 * 60 * 1000 } // 12h
+  cookie: { httpOnly: true, sameSite: 'lax', maxAge: 12 * 60 * 60 * 1000 }
 }));
 app.use(express.static('public'));
 
@@ -53,13 +54,44 @@ app.get('/agent', requireAuth, (req, res) => {
   res.sendFile(__dirname + '/public/agent.html');
 });
 
-// ---------- CHAT ----------
-const rooms = {};  // roomId -> { roomId, customerId, name, topic, agentId, joinedAt, messages: [] }
+// ---------- CHAT STATE ----------
+const rooms = {};  // roomId -> { roomId, customerId, name, topic, agentId, joinedAt, messages: [], waInvited }
 
+// ---------- WHATSAPP (server-side, rate-limited) ----------
+const waHits = new Map();
+const WA_LIMIT = 3;
+const WA_WINDOW = 60 * 1000;
+
+app.post('/api/whatsapp', (req, res) => {
+  const { roomId, name, topic } = req.body || {};
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+
+  const now = Date.now();
+  const h = waHits.get(ip);
+  if (h && now < h.resetAt) {
+    if (h.count >= WA_LIMIT) return res.status(429).json({ ok: false, error: 'Too many requests' });
+    h.count++;
+  } else {
+    waHits.set(ip, { count: 1, resetAt: now + WA_WINDOW });
+  }
+
+  if (!roomId || !rooms[roomId]) return res.status(400).json({ ok: false, error: 'Invalid chat' });
+
+  const ref = String(roomId).replace('room-', '').slice(0, 8).toUpperCase();
+  const safeName = String(name || rooms[roomId].name || 'Guest').slice(0, 60);
+  const safeTopic = String(topic || rooms[roomId].topic || 'General').slice(0, 60);
+
+  const text = `Hi Customer Support Service, I'm ${safeName}. Chat ref: #${ref}. Topic: ${safeTopic}. Continuing our conversation here.`;
+  const url = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(text)}`;
+
+  res.json({ ok: true, url });
+});
+
+// ---------- SOCKET.IO ----------
 io.on('connection', (socket) => {
   console.log('connected:', socket.id);
 
-  // Customer starts a private chat
+  // Customer starts private chat
   socket.on('customer:join', ({ name, topic }) => {
     const roomId = 'room-' + socket.id;
     rooms[roomId] = {
@@ -69,7 +101,8 @@ io.on('connection', (socket) => {
       topic: topic || 'General',
       agentId: null,
       joinedAt: Date.now(),
-      messages: []
+      messages: [],
+      waInvited: false
     };
     socket.join(roomId);
     socket.emit('chat:ready', { roomId });
@@ -77,29 +110,35 @@ io.on('connection', (socket) => {
     console.log('new customer:', roomId, name, topic);
   });
 
-  // Agent joins the agent-room to receive updates
+  // Agent registers
   socket.on('agent:register', () => {
     socket.join(AGENT_ROOM);
     socket.emit('customer:list', Object.values(rooms));
   });
 
-  // Agent opens a specific customer's room
+  // Agent joins a specific customer's room
   socket.on('agent:join', ({ roomId }) => {
     if (!rooms[roomId]) return;
     socket.join(roomId);
     rooms[roomId].agentId = socket.id;
-    // send prior messages to the agent
     socket.emit('chat:history', { messages: rooms[roomId].messages });
     io.to(roomId).emit('agent:joined', { name: AGENT_USER });
     io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
   });
 
-  // Private message — only delivered inside this room
+  // Private message
   socket.on('chat:message', ({ roomId, text, from }) => {
     if (!rooms[roomId]) return;
     const msg = { text: String(text).slice(0, 2000), from, ts: Date.now() };
     rooms[roomId].messages.push(msg);
     io.to(roomId).emit('chat:message', msg);
+
+    // Auto-show WhatsApp button if customer mentions whatsapp
+    if (from === 'customer' && /\bwhatsapp\b|\bwa\b/i.test(text)) {
+      rooms[roomId].waInvited = true;
+      io.to(roomId).emit('wa:show');
+      io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
+    }
   });
 
   // Structured airline request (delay / refund / baggage / complaint)
@@ -114,6 +153,14 @@ io.on('connection', (socket) => {
     rooms[roomId].messages.push(msg);
     io.to(roomId).emit('chat:message', msg);
     io.to(AGENT_ROOM).emit('customer:update', rooms[roomId]);
+  });
+
+  // Agent invites customer to WhatsApp
+  socket.on('wa:invite', ({ roomId }) => {
+    if (!rooms[roomId]) return;
+    rooms[roomId].waInvited = true;
+    io.to(roomId).emit('wa:show');
+    io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
   });
 
   // End chat
