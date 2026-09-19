@@ -145,7 +145,6 @@
 </footer>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/notify.js"></script>
 <script>
 const socket = io({
   reconnection: true,
@@ -187,7 +186,6 @@ function addMsg(text, who){
 }
 
 function start(){
-  CSS_RequestPush();
   myName = document.getElementById('name').value.trim() || 'Guest';
   myTopic = document.getElementById('topic').value;
   socket.emit('customer:join', { name: myName, topic: myTopic });
@@ -208,16 +206,6 @@ socket.on('agent:joined', () => addMsg('A Customer Support agent has joined your
 socket.on('chat:message', ({ text, from }) => {
   addMsg(text, from === 'customer' ? 'me' : 'them');
   document.getElementById('typingIndicator').textContent = '';
-
-  // Notify customer only when agent sent it and tab isn't visible
-  if (from === 'agent' && document.visibilityState !== 'visible') {
-    CSS_Notify('Customer Support', text.slice(0, 60), { push: true });
-  }
-});
-
-window.addEventListener('focus', () => CSS_StopFlash());
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') CSS_StopFlash();
 });
 
 socket.on('chat:ended', () => {
@@ -225,15 +213,11 @@ socket.on('chat:ended', () => {
   try { localStorage.removeItem('css_room'); } catch(e){}
 });
 
-// Typing indicator
 let typingTimer = null;
-function notifyTyping(){
-  if (!roomId) return;
-  socket.emit('typing', { roomId, from: 'customer' });
-}
 if (inputEl) {
   inputEl.addEventListener('input', () => {
-    notifyTyping();
+    if (!roomId) return;
+    socket.emit('typing', { roomId, from: 'customer' });
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
       socket.emit('typing:stop', { roomId, from: 'customer' });
@@ -242,14 +226,10 @@ if (inputEl) {
 }
 
 socket.on('typing', ({ from }) => {
-  if (from === 'agent') {
-    document.getElementById('typingIndicator').textContent = 'Customer Support is typing…';
-  }
+  if (from === 'agent') document.getElementById('typingIndicator').textContent = 'Customer Support is typing…';
 });
 socket.on('typing:stop', ({ from }) => {
-  if (from === 'agent') {
-    document.getElementById('typingIndicator').textContent = '';
-  }
+  if (from === 'agent') document.getElementById('typingIndicator').textContent = '';
 });
 
 window.addEventListener('load', () => {
@@ -268,11 +248,8 @@ socket.on('chat:restored', ({ roomId:id, messages, name, topic, waInvited }) => 
   chat.innerHTML = '';
   addMsg('Welcome back! Your chat has been restored.', 'sys');
   (messages || []).forEach(m => {
-    if (m.structured) {
-      addMsg('[' + m.structured.type + ']', 'sys');
-    } else {
-      addMsg(m.text, m.from === 'customer' ? 'me' : 'them');
-    }
+    if (m.structured) addMsg('[' + m.structured.type + ']', 'sys');
+    else addMsg(m.text, m.from === 'customer' ? 'me' : 'them');
   });
   if (waInvited) document.getElementById('waBar').classList.add('show');
 });
