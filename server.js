@@ -72,7 +72,7 @@ app.get('/agent', requireAuth, (req, res) => {
 });
 
 // ---------- CHAT STATE ----------
-const rooms = {};  // roomId -> chat object (live)
+const rooms = {};
 
 // ---------- WHATSAPP ----------
 const waHits = new Map();
