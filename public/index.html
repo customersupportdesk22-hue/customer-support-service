@@ -56,15 +56,20 @@
   .input-row{display:flex;gap:8px}
   .input-row input{margin-bottom:0;flex:1}
 
+  /* WhatsApp button (appears on request) */
+  .wa-bar{display:none;justify-content:flex-end;margin-bottom:8px}
+  .wa-bar.show{display:flex}
+  .wa-btn{background:#25D366;color:#fff;border:none;padding:8px 14px;border-radius:999px;
+          font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+          display:inline-flex;align-items:center;gap:6px}
+  .wa-btn:hover{background:#1EBE5A}
+
   .hint{font-size:12px;color:var(--muted);margin-top:10px}
   .checkbox{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:10px}
   .checkbox input{width:auto;margin:0}
 
   footer{text-align:center;padding:20px;color:var(--muted);font-size:12px}
   footer a{color:var(--primary);text-decoration:none}
-
-  .topic-badge{display:inline-block;background:#FFF7E0;color:#7A5C00;font-size:11px;
-               padding:3px 8px;border-radius:999px;font-weight:600;margin-left:8px}
 </style>
 </head>
 <body>
@@ -114,6 +119,9 @@
   </div>
 
   <div id="room" style="display:none">
+    <div class="wa-bar" id="waBar">
+      <button class="wa-btn" onclick="openWhatsApp()">💬 Chat on WhatsApp</button>
+    </div>
     <div id="chat"></div>
     <div class="actions" id="actions">
       <button onclick="quick('Flight delay / cancellation')">✈️ Flight delay</button>
@@ -170,6 +178,12 @@ socket.on('agent:joined', () => addMsg('A Customer Support agent has joined your
 socket.on('chat:message', ({ text, from }) => addMsg(text, from==='customer'?'me':'them'));
 socket.on('chat:ended', () => addMsg('This chat has ended. Thank you for contacting us.', 'sys'));
 
+// Show WhatsApp button when agent invites
+socket.on('wa:show', () => {
+  document.getElementById('waBar').classList.add('show');
+  addMsg('WhatsApp option enabled — tap the green button above to continue there.', 'sys');
+});
+
 function send(){
   const input = document.getElementById('msg');
   if(!input.value.trim() || !roomId) return;
@@ -187,6 +201,27 @@ function quick(topic){
   };
   socket.emit('chat:request', { roomId, type: topic, payload: payloads[topic] || {} });
   addMsg('You selected: ' + topic + ' — an agent will assist you with the details.', 'sys');
+}
+
+// Open WhatsApp via server (number stays hidden)
+async function openWhatsApp(){
+  if(!roomId) return;
+  try {
+    const r = await fetch('/api/whatsapp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomId,
+        name: document.getElementById('name').value.trim() || 'Guest',
+        topic: document.getElementById('topic').value
+      })
+    });
+    const data = await r.json();
+    if (data.ok) window.open(data.url, '_blank');
+    else addMsg('Could not open WhatsApp right now. Please try again later.', 'sys');
+  } catch(e) {
+    addMsg('Connection error opening WhatsApp.', 'sys');
+  }
 }
 </script>
 </body>
