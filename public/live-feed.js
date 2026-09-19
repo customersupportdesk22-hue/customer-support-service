@@ -1,8 +1,8 @@
 // public/live-feed.js — Sticky trust panel + real events
 
 (function(){
-  const TRUST_TITLE = 'Customer Support Service';
-  const TRUST_MESSAGE = '24/7 · Response usually under 1 minute';
+  const TRUST_TITLE = 'Customer Support Live Chat';
+  const TRUST_MESSAGE = '24/7 · Response usually under 5 minute';
   const TRUST_DELAY_MS = 3000;
   const EVENT_VISIBLE_MS = 6000;   // how long a real event stays before trust returns
   const MIN_GAP_MS = 3000;
