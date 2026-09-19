@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Login — Customer Support Service</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  :root{--primary:#003D82;--primary-dark:#002A5C;--accent:#F2B705;--cloud:#F0F4F8;--text:#1A2B4A;--muted:#5A6B85}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,system-ui,sans-serif;background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+       min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .box{background:#fff;border-radius:16px;padding:32px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  .logo{display:flex;align-items:center;justify-content:center;margin-bottom:24px}
+  .logo svg{height:52px;width:auto}
+  h1{font-size:18px;color:var(--primary);margin-bottom:6px;text-align:center}
+  p.sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px}
+  input{width:100%;padding:12px 14px;border:1px solid #CBD5E0;border-radius:10px;font-size:14px;
+        margin-bottom:12px;font-family:inherit}
+  input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(0,61,130,.1)}
+  button{width:100%;background:var(--primary);color:#fff;border:none;padding:12px;border-radius:10px;
+         font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+  button:hover{background:var(--primary-dark)}
+  #err{color:#C53030;font-size:13px;margin-top:10px;text-align:center;min-height:18px}
+  .footer{text-align:center;font-size:11px;color:var(--muted);margin-top:18px}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">
+    <svg viewBox="0 0 340 72" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="8" width="56" height="56" rx="14" fill="#003D82"/>
+      <path d="M22 34v-6a14 14 0 0 1 28 0v6" stroke="#F2B705" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+      <rect x="18" y="32" width="8" height="14" rx="3" fill="#F2B705"/>
+      <rect x="38" y="32" width="8" height="14" rx="3" fill="#F2B705"/>
+      <path d="M46 44v4a4 4 0 0 1-4 4h-6" stroke="#F2B705" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <text x="80" y="40" font-family="Inter,sans-serif" font-size="22" font-weight="700" fill="#003D82">Customer Support</text>
+      <text x="81" y="58" font-family="Inter,sans-serif" font-size="13" font-weight="600" fill="#F2B705" letter-spacing="2">SERVICE</text>
+    </svg>
+  </div>
+  <h1>Agent Login</h1>
+  <p class="sub">Authorised personnel only</p>
+  <input id="u" placeholder="Username" autocomplete="username">
+  <input id="p" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+  <button onclick="login()">Log in</button>
+  <div id="err"></div>
+  <div class="footer">© 2025 Customer Support Service</div>
+</div>
+<script>
+async function login(){
+  const username = document.getElementById('u').value.trim();
+  const password = document.getElementById('p').value;
+  const err = document.getElementById('err');
+  err.textContent = '';
+  const r = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await r.json();
+  if (data.ok) { window.location.href = '/agent'; }
+  else { err.textContent = 'Invalid username or password'; }
+}
+</script>
+</body>
+</html>
