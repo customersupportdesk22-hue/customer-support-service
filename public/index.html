@@ -92,12 +92,8 @@
 </header>
 
 <section class="hero">
-  <h1>Customer Support Services, Refund & Compensation Assistance.
-</h1>
-  <p>-
-Flight delays, refunds, cancellations, baggage issues, complaints —
-
-Please start a private chat with our support team. Send us a message describing your inquiry, and a customer support representative will guide you through the next steps.</p>
+  <h1>Customer Support Services, Refund &amp; Compensation Assistance.</h1>
+  <p>Flight delays, refunds, cancellations, baggage issues, complaints — please start a private chat with our support team. Send us a message describing your inquiry, and a customer support representative will guide you through the next steps.</p>
 </section>
 
 <div class="card">
@@ -149,6 +145,7 @@ Please start a private chat with our support team. Send us a message describing 
 </footer>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/live-feed.js"></script>
 <script>
 const socket = io({
   reconnection: true,
@@ -243,6 +240,12 @@ window.addEventListener('load', () => {
     restored = true;
     socket.emit('customer:reconnect', { roomId: saved });
   }
+
+  // Start the live feed — trust panel + recent REAL events
+  if (window.CSS_LiveFeed) {
+    setTimeout(() => CSS_LiveFeed.showTrust(), 3000);
+    CSS_LiveFeed.loadRecent();
+  }
 });
 
 socket.on('chat:restored', ({ roomId:id, messages, name, topic, waInvited }) => {
@@ -268,6 +271,13 @@ socket.on('wa:show', () => {
   document.getElementById('waBar').classList.add('show');
   addMsg('WhatsApp option enabled — tap the green button above to continue there.', 'sys');
 });
+
+// ---- LIVE FEED — real events from the server ----
+if (window.CSS_LiveFeed) {
+  socket.on('activity:new', (evt) => {
+    if (evt && evt.type) CSS_LiveFeed.onEvent(evt.type);
+  });
+}
 
 function send(){
   if(!inputEl.value.trim() || !roomId) return;
