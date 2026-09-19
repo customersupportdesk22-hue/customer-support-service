@@ -104,6 +104,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/notify.js"></script>
 <script>
 const socket = io({
   reconnection: true,
@@ -118,12 +119,13 @@ let activeRoom = null;
 let customers = [];
 const inputEl = document.getElementById('msg');
 
-// connection status
 socket.on('connect', () => {
   document.getElementById('connStatus').textContent = '🟢 Online';
   socket.emit('agent:register');
   if (activeRoom) socket.emit('agent:join', { roomId: activeRoom });
+  CSS_RequestPush();
 });
+
 socket.on('disconnect', () => {
   document.getElementById('connStatus').textContent = '🔴 Reconnecting…';
 });
@@ -132,6 +134,7 @@ socket.on('customer:list', (list) => { customers = list; refresh(); });
 socket.on('customer:new', (c) => {
   if (!customers.find(x => x.roomId === c.roomId)) customers.push(c);
   refresh();
+  CSS_Notify('New customer', c.name + ' — ' + (c.topic || 'General'), { push: true });
 });
 socket.on('customer:update', () => refresh());
 
@@ -178,10 +181,21 @@ socket.on('chat:history', ({ messages }) => {
   (messages || []).forEach(m => renderMsg(m));
 });
 
-// THE MOST IMPORTANT HANDLER — messages appear instantly
 socket.on('chat:message', (m) => {
   renderMsg(m);
   document.getElementById('typingIndicator').textContent = '';
+
+  if (m.from === 'customer') {
+    const isActive = (activeRoom && m.roomId === activeRoom);
+    if (!isActive || document.visibilityState !== 'visible') {
+      CSS_Notify('New message', m.text.slice(0, 60), { push: true });
+    }
+  }
+});
+
+window.addEventListener('focus', () => CSS_StopFlash());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') CSS_StopFlash();
 });
 
 function renderMsg(m){
@@ -199,7 +213,6 @@ function renderMsg(m){
   chat.scrollTop = chat.scrollHeight;
 }
 
-// Typing indicator — send
 let typingTimer = null;
 if (inputEl) {
   inputEl.addEventListener('input', () => {
@@ -212,7 +225,6 @@ if (inputEl) {
   });
 }
 
-// Typing indicator — receive
 socket.on('typing', ({ from }) => {
   if (from === 'customer') {
     document.getElementById('typingIndicator').textContent = 'Customer is typing…';
