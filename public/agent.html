@@ -104,7 +104,6 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/notify.js"></script>
 <script>
 const socket = io({
   reconnection: true,
@@ -123,7 +122,6 @@ socket.on('connect', () => {
   document.getElementById('connStatus').textContent = '🟢 Online';
   socket.emit('agent:register');
   if (activeRoom) socket.emit('agent:join', { roomId: activeRoom });
-  CSS_RequestPush();
 });
 
 socket.on('disconnect', () => {
@@ -134,7 +132,6 @@ socket.on('customer:list', (list) => { customers = list; refresh(); });
 socket.on('customer:new', (c) => {
   if (!customers.find(x => x.roomId === c.roomId)) customers.push(c);
   refresh();
-  CSS_Notify('New customer', c.name + ' — ' + (c.topic || 'General'), { push: true });
 });
 socket.on('customer:update', () => refresh());
 
@@ -184,18 +181,6 @@ socket.on('chat:history', ({ messages }) => {
 socket.on('chat:message', (m) => {
   renderMsg(m);
   document.getElementById('typingIndicator').textContent = '';
-
-  if (m.from === 'customer') {
-    const isActive = (activeRoom && m.roomId === activeRoom);
-    if (!isActive || document.visibilityState !== 'visible') {
-      CSS_Notify('New message', m.text.slice(0, 60), { push: true });
-    }
-  }
-});
-
-window.addEventListener('focus', () => CSS_StopFlash());
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') CSS_StopFlash();
 });
 
 function renderMsg(m){
