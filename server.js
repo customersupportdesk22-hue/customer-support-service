@@ -17,6 +17,8 @@ const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 const AGENT_ROOM = 'agent-room';
 const WA_NUMBER = '254743993329';
 const DB_FILE = path.join(__dirname, 'chats.json');
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 // ----------------------------
 
 app.use(express.json());
@@ -74,8 +76,7 @@ app.get('/agent', requireAuth, (req, res) => {
 // ---------- CHAT STATE ----------
 const rooms = {};
 
-// ---------- REAL ACTIVITY LOG (honest events only) ----------
-// Keeps the last 20 REAL events. No fake entries. Ever.
+// ---------- REAL ACTIVITY LOG ----------
 const recentEvents = [];
 const MAX_EVENTS = 20;
 
@@ -83,12 +84,10 @@ function logEvent(type, message) {
   const evt = { type, message, ts: Date.now() };
   recentEvents.push(evt);
   if (recentEvents.length > MAX_EVENTS) recentEvents.shift();
-  // Broadcast to every connected visitor so they see real activity
   io.emit('activity:new', evt);
 }
 
 app.get('/api/activity', (req, res) => {
-  // Return only events from the last 30 minutes
   const cutoff = Date.now() - 30 * 60 * 1000;
   res.json({ events: recentEvents.filter(e => e.ts >= cutoff) });
 });
@@ -123,11 +122,90 @@ app.post('/api/whatsapp', (req, res) => {
   res.json({ ok: true, url });
 });
 
+// ---------- AI SUGGESTION (Groq) ----------
+const aiHits = new Map();
+const AI_LIMIT = 20;
+const AI_WINDOW = 60 * 1000;
+
+app.post('/api/ai-suggest', requireAuth, async (req, res) => {
+  // rate limit
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const h = aiHits.get(ip);
+  if (h && now < h.resetAt) {
+    if (h.count >= AI_LIMIT) return res.status(429).json({ ok: false, error: 'Too many AI requests' });
+    h.count++;
+  } else {
+    aiHits.set(ip, { count: 1, resetAt: now + AI_WINDOW });
+  }
+
+  if (!GROQ_API_KEY) return res.status(500).json({ ok: false, error: 'AI not configured' });
+
+  const { roomId } = req.body || {};
+  if (!roomId || !rooms[roomId]) return res.status(400).json({ ok: false, error: 'Invalid chat' });
+
+  const chat = rooms[roomId];
+  // Build a compact history (last 10 messages)
+  const history = (chat.messages || []).slice(-10).map(m => {
+    const who = m.from === 'customer' ? 'Customer' : 'Agent';
+    const text = m.structured
+      ? `[${m.structured.type}] ${JSON.stringify(m.structured.payload)}`
+      : m.text;
+    return who + ': ' + text;
+  }).join('\n');
+
+  const systemPrompt = `You are an assistant for a professional airline customer support service.
+You draft SHORT, polite, and helpful suggested replies for the human agent.
+Rules:
+- Never promise refunds, compensation amounts, or timelines.
+- Never claim to be an airline. The company is an independent support service.
+- Ask for specific details when needed (booking reference, flight number, bag tag).
+- Keep the reply under 55 words.
+- Use a warm, professional tone.
+- Output ONLY the suggested reply text. No quotes, no preamble, no labels.`;
+
+  const userPrompt = `Chat topic: ${chat.topic || 'General'}\n\nRecent conversation:\n${history}\n\nDraft a suggested reply for the agent to send next.`;
+
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + GROQ_API_KEY
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.5,
+        max_tokens: 200
+      })
+    });
+
+    if (!r.ok) {
+      const errText = await r.text();
+      console.error('Groq error:', r.status, errText);
+      return res.status(502).json({ ok: false, error: 'AI service error' });
+    }
+
+    const data = await r.json();
+    const suggestion = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || '').trim();
+
+    if (!suggestion) return res.status(502).json({ ok: false, error: 'Empty AI reply' });
+
+    res.json({ ok: true, suggestion });
+  } catch (e) {
+    console.error('AI error:', e);
+    res.status(500).json({ ok: false, error: 'AI request failed' });
+  }
+});
+
 // ---------- SOCKET.IO ----------
 io.on('connection', (socket) => {
   console.log('connected:', socket.id);
 
-  // Customer starts private chat
   socket.on('customer:join', ({ name, topic }) => {
     const roomId = 'room-' + crypto.randomBytes(6).toString('hex');
     rooms[roomId] = {
@@ -145,13 +223,10 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socket.emit('chat:ready', { roomId });
     io.to(AGENT_ROOM).emit('customer:new', rooms[roomId]);
-
-    // REAL EVENT
     logEvent('join', '💬 A customer just started a chat');
     console.log('new customer:', roomId, name, topic);
   });
 
-  // Customer reconnects
   socket.on('customer:reconnect', ({ roomId }) => {
     const chat = rooms[roomId] || savedChats[roomId];
     if (!chat) { socket.emit('chat:notfound'); return; }
@@ -197,7 +272,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Structured requests → these also produce REAL events
   socket.on('chat:request', ({ roomId, type, payload }) => {
     if (!rooms[roomId]) return;
     const msg = {
@@ -213,14 +287,13 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('chat:message', msg);
     io.to(AGENT_ROOM).emit('customer:update', rooms[roomId]);
 
-    // REAL EVENT — only fires when the customer actually submits a request
     const eventMap = {
-      'Refund request':           ['refund',    '💰 A refund request was submitted'],
-      'Flight delay / cancellation': ['delay',  '✈️ A flight delay case was opened'],
-      'Baggage issue':            ['baggage',   '🧳 A baggage issue was reported'],
-      'Complaint':                ['complaint', '📢 A complaint was filed'],
-      'Change or cancel flight':  ['change',    '🔄 A flight change was requested'],
-      'Flight status':            ['status',    '🛫 A flight status enquiry was made']
+      'Refund request':              ['refund',    '💰 A refund request was submitted'],
+      'Flight delay / cancellation': ['delay',     '✈️ A flight delay case was opened'],
+      'Baggage issue':               ['baggage',   '🧳 A baggage issue was reported'],
+      'Complaint':                   ['complaint', '📢 A complaint was filed'],
+      'Change or cancel flight':     ['change',    '🔄 A flight change was requested'],
+      'Flight status':               ['status',    '🛫 A flight status enquiry was made']
     };
     const evt = eventMap[type];
     if (evt) logEvent(evt[0], evt[1]);
@@ -251,8 +324,6 @@ io.on('connection', (socket) => {
     delete savedChats[roomId];
     persistChats();
     io.to(AGENT_ROOM).emit('customer:list', Object.values(rooms));
-
-    // REAL EVENT
     logEvent('resolved', '✅ A customer chat was resolved');
   });
 
