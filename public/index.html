@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Customer Support Service — Customer Support Refund & Compensation Assistance</title>
+<title>Customer Support Service — Airline Refund & Compensation Assistance</title>
 <meta name="description" content="Airline customer support for flight delays, cancellations, refunds, baggage issues, and complaints. Start a private chat with our support team.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
@@ -61,11 +61,9 @@
 
   .card{max-width:640px;margin:0 auto 30px;background:#fff;border-radius:16px;
         box-shadow:0 10px 40px rgba(0,61,130,.12);padding:24px}
-
   h2.card-title{font-size:17px;font-weight:600;margin-bottom:6px;color:var(--primary);
                 display:flex;align-items:center;gap:8px}
   h2.card-title svg{flex-shrink:0}
-
   .sub{font-size:13px;color:var(--muted);margin-bottom:16px}
 
   input,select,textarea{width:100%;padding:12px 14px;border:1px solid #CBD5E0;border-radius:10px;
@@ -77,9 +75,8 @@
   button:hover{background:var(--primary-dark)}
 
   .hint{font-size:12px;color:var(--muted);margin-top:10px}
-  .consent-line{font-size:11.5px;color:var(--muted);line-height:1.55;margin-top:10px;margin-bottom:4px}
+  .consent-line{font-size:11.5px;color:var(--muted);line-height:1.55;margin-top:10px}
   .consent-line a{color:var(--primary);font-weight:600;text-decoration:underline}
-
   .checkbox{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:10px;line-height:1.5}
   .checkbox input{width:auto;margin:3px 0 0 0}
 
@@ -140,7 +137,7 @@
     .footer-inner{grid-template-columns:1fr;gap:20px}
   }
 
-  /* ===== CHAT ROOM VIEW (fullscreen) ===== */
+  /* ===== CHAT ROOM VIEW ===== */
   #chatView{
     display:none;
     position:fixed; inset:0;
@@ -169,7 +166,7 @@
   .room-body{
     flex:1; display:flex; flex-direction:column;
     max-width:780px; width:100%; margin:0 auto;
-    overflow:hidden;
+    overflow:hidden; position:relative;
   }
   .room-status{
     padding:10px 20px; font-size:12.5px; color:var(--success);
@@ -190,6 +187,15 @@
   .me{background:var(--primary);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
   .them{background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px}
   .sys{background:#FFF7E0;color:#7A5C00;font-size:12.5px;border-left:3px solid var(--accent);max-width:100%}
+
+  .msg.card-msg{
+    background:#F0F7FF;color:var(--text);border:1px solid #D6E6F8;
+    border-radius:12px;max-width:88%;padding:12px 14px;
+    border-left:4px solid var(--primary);margin-left:auto;
+  }
+  .msg.card-msg .hdr{font-weight:700;font-size:13px;color:var(--primary);margin-bottom:6px}
+  .msg.card-msg .row{font-size:12.5px;color:var(--text);margin-bottom:3px;line-height:1.5}
+  .msg.card-msg .row b{color:var(--muted);font-weight:600;margin-right:4px}
 
   .typing{
     font-size:12px;color:var(--muted);font-style:italic;
@@ -215,6 +221,10 @@
     white-space:nowrap;
   }
   .room-actions button:hover{background:#DFE8F5}
+  @media (max-width:500px){
+    .room-actions button{font-size:11px;padding:6px 2px;flex-direction:column;gap:2px}
+    .room-actions button span.lbl{font-size:10px;display:block}
+  }
 
   .room-composer{
     padding:12px 16px 16px; background:#fff;
@@ -229,10 +239,61 @@
     background:var(--primary);color:#fff;border:none;padding:12px 22px;
     border-radius:10px;font-weight:600;cursor:pointer;font-family:inherit;
   }
-  @media (max-width:500px){
-  .room-actions button{font-size:11px;padding:6px 2px;flex-direction:column;gap:2px}
-  .room-actions button span.lbl{font-size:10px;display:block}
-}
+
+  /* ===== FORM OVERLAY ===== */
+  .form-overlay{
+    display:none;
+    position:absolute; inset:0;
+    background:rgba(15,28,51,.55);
+    z-index:10;
+    align-items:flex-end;
+    justify-content:center;
+  }
+  .form-overlay.active{display:flex}
+
+  .form-panel{
+    background:#fff;
+    width:100%;
+    max-width:780px;
+    border-radius:20px 20px 0 0;
+    padding:20px 20px 24px;
+    box-shadow:0 -12px 40px rgba(0,0,0,.2);
+    transform:translateY(20px);
+    opacity:0;
+    transition:transform .25s ease,opacity .25s ease;
+    max-height:88vh;
+    overflow-y:auto;
+  }
+  .form-overlay.active .form-panel{
+    transform:translateY(0);
+    opacity:1;
+  }
+
+  .form-panel .form-title{
+    font-size:16px;font-weight:700;color:var(--primary);
+    margin-bottom:4px;display:flex;align-items:center;gap:8px;
+  }
+  .form-panel .form-sub{
+    font-size:12.5px;color:var(--muted);margin-bottom:16px;
+  }
+  .form-panel label{
+    display:block;font-size:12.5px;font-weight:600;color:var(--text);
+    margin-bottom:5px;
+  }
+  .form-panel textarea{
+    min-height:70px;resize:vertical;font-family:inherit;
+  }
+  .form-buttons{
+    display:flex;gap:8px;margin-top:6px;
+  }
+  .form-buttons button{
+    flex:1;padding:12px;font-size:14px;font-weight:600;
+    border-radius:10px;cursor:pointer;font-family:inherit;
+  }
+  .form-buttons .cancel{background:#EDF2F7;color:var(--primary)}
+  .form-buttons .cancel:hover{background:#DFE8F5}
+  .form-buttons .submit{background:var(--primary);color:#fff;flex:2}
+  .form-buttons .submit:hover{background:var(--primary-dark)}
 </style>
 </head>
 <body>
@@ -258,7 +319,7 @@
 </header>
 
 <section class="hero">
-  <h1>Customer Support Team Refund &amp; Compensation Assistance</h1>
+  <h1>Airline Refund &amp; Compensation Assistance</h1>
   <p>Flight delayed, cancelled, or lost baggage? Start a private chat with our support team. Describe your issue, and a representative will guide you through the next steps — refunds, compensation, rebooking, and complaints.</p>
 </section>
 
@@ -379,10 +440,10 @@
 
 <section class="legal" id="privacy">
   <div class="legal-box">
-    <h3>🔒 Privacy Notice &amp; Service Disclaimer</h3>
-    <p><strong>Privacy:</strong> When you start a chat, we collect the name (optional), topic, and messages you send. This information is stored securely on our servers so our support team can assist you, and is retained only as long as needed to resolve your inquiry. We never sell or share your data with third parties.</p>
-    <p><strong>Service scope:</strong> Customer Support Service is an professional airline assistance service. We help you organise and submit refund, compensation, and complaint requests to the relevant airline. the final decision on any refund or compensation claim rests with us.</p>
-
+        <h3>🔒 Privacy Notice &amp; Service Disclaimer</h3>
+    <p><strong>Privacy:</strong> When you start a chat, we collect the name (optional), topic, and messages you send. This information is stored securely on our servers so our support team can assist you, and is retained only as long as needed to resolve your inquiry. We never sell or share your data with third parties. To request deletion of your chat data, email <a href="mailto:customersupportdesk22@gmail.com">customersupportdesk22@gmail.com</a>.</p>
+    <p><strong>Service scope:</strong> Customer Support Service is an independent airline assistance service. We help you organise and submit refund, compensation, and complaint requests to the relevant airline. We are not an airline, a government body, or a legal firm, and we do not guarantee a specific outcome — the final decision on any refund or compensation claim rests with the airline concerned.</p>
+    <p><strong>No payment requests:</strong> Our support team will never ask you for card numbers, passwords, or payment over this chat. If anyone claims to represent us and asks for payment, please stop the conversation and report it to <a href="mailto:customersupportdesk22@gmail.com">customersupportdesk22@gmail.com</a>.</p>
     <p><strong>Accuracy:</strong> Please provide accurate booking details so we can assist you correctly. We are not responsible for delays or outcomes caused by incorrect information supplied in the chat.</p>
   </div>
 </section>
@@ -391,11 +452,12 @@
   <div class="footer-inner">
     <div class="footer-col">
       <h4>Customer Support Service</h4>
-      <p>professional airline customer support — flight delays, refunds, baggage issues, and complaints. Available 24/7 for new conversations.</p>
+      <p>Independent airline customer support — flight delays, refunds, baggage issues, and complaints. Available 24/7 for new conversations.</p>
     </div>
     <div class="footer-col">
-     
-   
+      <h4>Contact</h4>
+      <a href="mailto:customersupportdesk22@gmail.com">customersupportdesk22@gmail.com</a>
+      <a href="https://wa.me/254743993329" target="_blank" rel="noopener">WhatsApp: +254 743 993 329</a>
     </div>
     <div class="footer-col">
       <h4>Support topics</h4>
@@ -407,8 +469,8 @@
   </div>
   <div class="footer-bottom">
     <strong>© 2025 Customer Support Service.</strong> All rights reserved.<br>
-    This is an professional support service. We are  affiliated with airline, government agency, or legal firm.<br>
-    All claims and refunds are subject to the airline policies and final decision.
+    This is an independent support service. We are not affiliated with any airline, government agency, or legal firm.<br>
+    All claims and refunds are subject to the airline's own policies and final decision.
   </div>
 </footer>
 
@@ -416,7 +478,7 @@
 
 
 <!-- ==================================================== -->
-<!-- CHAT ROOM VIEW (full screen when active)              -->
+<!-- CHAT ROOM VIEW                                        -->
 <!-- ==================================================== -->
 <div id="chatView">
   <div class="room-header">
@@ -424,7 +486,7 @@
       <button class="back-btn" onclick="leaveChat()" title="Back to homepage">←</button>
       <div>
         <div class="title">Private chat</div>
-        <div class="subtitle" id="roomSubtitle">You are connected</div>
+        <div class="subtitle" id="roomSubtitle">Topic: General</div>
       </div>
     </div>
     <div class="status-pill"><span class="status-dot"></span>Agents online 24/7</div>
@@ -441,15 +503,27 @@
     <div class="typing" id="typingIndicator"></div>
 
     <div class="room-actions" id="actions">
-      <button onclick="quick('Flight delay / cancellation')">✈️ <span class="lbl">Delay</span></button>
-      <button onclick="quick('Refund request')">💰 <span class="lbl">Refund</span></button>
-      <button onclick="quick('Baggage issue')">🧳 <span class="lbl">Baggage</span></button>
-      <button onclick="quick('Complaint')">📢 <span class="lbl">Complaint</span></button>
+      <button onclick="openForm('delay')">✈️ <span class="lbl">Delay</span></button>
+      <button onclick="openForm('refund')">💰 <span class="lbl">Refund</span></button>
+      <button onclick="openForm('baggage')">🧳 <span class="lbl">Baggage</span></button>
+      <button onclick="openForm('complaint')">📢 <span class="lbl">Complaint</span></button>
     </div>
 
     <div class="room-composer">
       <input id="msg" placeholder="Type your message…" onkeydown="if(event.key==='Enter')send()">
       <button onclick="send()">Send</button>
+    </div>
+
+    <div class="form-overlay" id="formOverlay" onclick="if(event.target===this)closeForm()">
+      <div class="form-panel">
+        <div class="form-title" id="formTitle">Form</div>
+        <div class="form-sub" id="formSub">Please fill in the details below</div>
+        <div id="formFields"></div>
+        <div class="form-buttons">
+          <button class="cancel" onclick="closeForm()">Cancel</button>
+          <button class="submit" onclick="submitForm()">Send to support</button>
+        </div>
+      </div>
     </div>
   </div>
 </div><!-- /#chatView -->
@@ -472,23 +546,16 @@ let myName = 'Guest';
 let myTopic = 'General';
 let restored = false;
 let chatOpen = false;
+let currentForm = null;
 const chat = document.getElementById('chat');
 const inputEl = document.getElementById('msg');
 
+/* ---------- VIEW SWITCHING ---------- */
 function showChatView(){
   chatOpen = true;
   document.getElementById('homeView').style.display = 'none';
   document.getElementById('chatView').classList.add('active');
   document.body.style.overflow = 'hidden';
-  setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
-}
-
-function showChatView(){
-  chatOpen = true;
-  document.getElementById('homeView').style.display = 'none';
-  document.getElementById('chatView').classList.add('active');
-  document.body.style.overflow = 'hidden';
-  // Hide the live-feed popup while inside the chat
   var lf = document.getElementById('__live_feed');
   if (lf) lf.style.display = 'none';
   setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
@@ -499,13 +566,13 @@ function leaveChat(){
   document.getElementById('chatView').classList.remove('active');
   document.getElementById('homeView').style.display = 'block';
   document.body.style.overflow = '';
-  // Show the live-feed popup again on the homepage
   var lf = document.getElementById('__live_feed');
   if (lf) lf.style.display = 'flex';
 }
 
+/* ---------- CONNECTION STATUS ---------- */
 socket.on('connect', () => {
-  const pill = document.getElementById('statusPill');
+  var pill = document.getElementById('statusPill');
   if (pill) {
     pill.classList.remove('offline');
     document.getElementById('statusText').textContent = 'Agents online 24/7';
@@ -514,7 +581,7 @@ socket.on('connect', () => {
 });
 
 socket.on('disconnect', () => {
-  const pill = document.getElementById('statusPill');
+  var pill = document.getElementById('statusPill');
   if (pill) {
     pill.classList.add('offline');
     document.getElementById('statusText').textContent = 'Reconnecting…';
@@ -525,17 +592,37 @@ document.getElementById('wantEmail').addEventListener('change', e => {
   document.getElementById('email').style.display = e.target.checked ? 'block' : 'none';
 });
 
+/* ---------- MESSAGES ---------- */
 function addMsg(text, who){
   const d = document.createElement('div');
-  d.className = 'msg ' + (who==='me' ? 'me' : who==='sys' ? 'sys' : 'them');
+  d.className = 'msg ' + (who === 'me' ? 'me' : who === 'sys' ? 'sys' : 'them');
   d.textContent = text;
   chat.appendChild(d);
   chat.scrollTop = chat.scrollHeight;
 }
 
+function addCard(title, rows){
+  const d = document.createElement('div');
+  d.className = 'msg card-msg';
+  var html = '<div class="hdr">' + title + '</div>';
+  rows.forEach(r => {
+    html += '<div class="row"><b>' + r[0] + ':</b> ' + escapeHtml(r[1] || '—') + '</div>';
+  });
+  d.innerHTML = html;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+/* ---------- START CHAT ---------- */
 function start(){
-  myName = document.getElementById('name').value.trim() || 'Guest';
-  myTopic = document.getElementById('topic').value;
+  myName = (document.getElementById('name').value || '').trim() || 'Guest';
+  myTopic = document.getElementById('topic').value || 'General';
 
   showChatView();
   document.getElementById('roomSubtitle').textContent = 'Topic: ' + myTopic;
@@ -544,7 +631,8 @@ function start(){
   addMsg('Connecting you to a Customer Support Service agent…', 'them');
 }
 
-socket.on('chat:ready', ({ roomId:id }) => {
+/* ---------- SOCKET EVENTS ---------- */
+socket.on('chat:ready', ({ roomId: id }) => {
   roomId = id;
   try { localStorage.setItem('css_room', id); } catch(e){}
 });
@@ -561,6 +649,7 @@ socket.on('chat:ended', () => {
   try { localStorage.removeItem('css_room'); } catch(e){}
 });
 
+/* ---------- TYPING ---------- */
 let typingTimer = null;
 if (inputEl) {
   inputEl.addEventListener('input', () => {
@@ -580,6 +669,7 @@ socket.on('typing:stop', ({ from }) => {
   if (from === 'agent') document.getElementById('typingIndicator').textContent = '';
 });
 
+/* ---------- RESTORE / RECONNECT ---------- */
 window.addEventListener('load', () => {
   let saved = null;
   try { saved = localStorage.getItem('css_room'); } catch(e){}
@@ -595,14 +685,14 @@ window.addEventListener('load', () => {
   }
 });
 
-socket.on('chat:restored', ({ roomId:id, messages, name, topic, waInvited }) => {
+socket.on('chat:restored', ({ roomId: id, messages, name, topic, waInvited }) => {
   roomId = id;
   document.getElementById('roomSubtitle').textContent = 'Topic: ' + (topic || 'General');
   showChatView();
   chat.innerHTML = '';
   addMsg('Welcome back! Your chat has been restored.', 'sys');
   (messages || []).forEach(m => {
-    if (m.structured) addMsg('[' + m.structured.type + ']', 'sys');
+    if (m.structured) addCard(m.structured.type, []);
     else addMsg(m.text, m.from === 'customer' ? 'me' : 'them');
   });
   if (waInvited) document.getElementById('waBar').classList.add('show');
@@ -624,27 +714,120 @@ if (window.CSS_LiveFeed) {
   });
 }
 
+/* ---------- SEND ---------- */
 function send(){
-  if(!inputEl.value.trim() || !roomId) return;
+  if (!inputEl.value.trim() || !roomId) return;
   socket.emit('chat:message', { roomId, text: inputEl.value, from: 'customer' });
   socket.emit('typing:stop', { roomId, from: 'customer' });
   inputEl.value = '';
 }
 
-function quick(topic){
-  if(!roomId) return;
-  const payloads = {
-    'Flight delay / cancellation': { flight: '', airport: '', details: '' },
-    'Refund request': { bookingRef: '', amount: '', reason: '' },
-    'Baggage issue': { bagTag: '', type: 'Lost / Delayed / Damaged', details: '' },
-    'Complaint': { summary: '', reference: '' }
-  };
-  socket.emit('chat:request', { roomId, type: topic, payload: payloads[topic] || {} });
-  addMsg('You selected: ' + topic + ' — an agent will assist you with the details.', 'sys');
+/* ---------- FORMS ---------- */
+const FORM_CONFIG = {
+  delay: {
+    icon: '✈️',
+    title: 'Flight delay or cancellation',
+    sub: 'Tell us about your disrupted flight',
+    fields: [
+      { id: 'flight', label: 'Flight number', type: 'text', placeholder: 'e.g. KQ100', required: true },
+      { id: 'airport', label: 'Airport', type: 'text', placeholder: 'e.g. Nairobi (NBO)', required: true },
+      { id: 'details', label: 'Short description', type: 'textarea', placeholder: 'What happened?', required: true }
+    ]
+  },
+  refund: {
+    icon: '💰',
+    title: 'Refund request',
+    sub: 'Submit a refund or compensation request',
+    fields: [
+      { id: 'bookingRef', label: 'Booking reference', type: 'text', placeholder: 'e.g. ABC123', required: true },
+      { id: 'amount', label: 'Amount requested', type: 'text', placeholder: 'e.g. 250 USD', required: false },
+      { id: 'reason', label: 'Reason', type: 'textarea', placeholder: 'Why are you requesting a refund?', required: true }
+    ]
+  },
+  baggage: {
+    icon: '🧳',
+    title: 'Baggage issue',
+    sub: 'Lost, delayed, or damaged bag',
+    fields: [
+      { id: 'bagTag', label: 'Bag tag number', type: 'text', placeholder: 'e.g. BA123456', required: true },
+      { id: 'type', label: 'Type of issue', type: 'select', options: ['Lost', 'Delayed', 'Damaged'], required: true },
+      { id: 'details', label: 'Details', type: 'textarea', placeholder: 'Describe what happened', required: true }
+    ]
+  },
+  complaint: {
+    icon: '📢',
+    title: 'File a complaint',
+    sub: 'Tell us what went wrong',
+    fields: [
+      { id: 'summary', label: 'Summary of complaint', type: 'textarea', placeholder: 'Briefly describe your complaint', required: true },
+      { id: 'reference', label: 'Reference number (optional)', type: 'text', placeholder: 'Booking or ticket reference', required: false }
+    ]
+  }
+};
+
+function openForm(kind){
+  if (!roomId) return;
+  const cfg = FORM_CONFIG[kind];
+  if (!cfg) return;
+  currentForm = kind;
+
+  document.getElementById('formTitle').innerHTML = cfg.icon + ' ' + cfg.title;
+  document.getElementById('formSub').textContent = cfg.sub;
+
+  let html = '';
+  cfg.fields.forEach(f => {
+    html += '<label>' + f.label + (f.required ? ' <span style="color:#C53030">*</span>' : '') + '</label>';
+    if (f.type === 'textarea') {
+      html += '<textarea id="ff_' + f.id + '" placeholder="' + (f.placeholder||'') + '"></textarea>';
+    } else if (f.type === 'select') {
+      html += '<select id="ff_' + f.id + '">';
+      f.options.forEach(o => { html += '<option>' + o + '</option>'; });
+      html += '</select>';
+    } else {
+      html += '<input id="ff_' + f.id + '" type="text" placeholder="' + (f.placeholder||'') + '">';
+    }
+  });
+  document.getElementById('formFields').innerHTML = html;
+
+  const overlay = document.getElementById('formOverlay');
+  overlay.classList.add('active');
+  document.body.style.overflow = 'hidden';
 }
 
+function closeForm(){
+  document.getElementById('formOverlay').classList.remove('active');
+  document.body.style.overflow = 'hidden';
+  currentForm = null;
+}
+
+function submitForm(){
+  if (!currentForm || !roomId) return;
+  const cfg = FORM_CONFIG[currentForm];
+  const payload = {};
+  let missing = [];
+  cfg.fields.forEach(f => {
+    const el = document.getElementById('ff_' + f.id);
+    const v = el ? el.value.trim() : '';
+    payload[f.id] = v;
+    if (f.required && !v) missing.push(f.label);
+  });
+
+  if (missing.length){
+    alert('Please fill in:\n• ' + missing.join('\n• '));
+    return;
+  }
+
+  socket.emit('chat:request', { roomId, type: cfg.title, payload });
+
+  const rows = cfg.fields.map(f => [f.label, payload[f.id]]);
+  addCard(cfg.icon + ' ' + cfg.title + ' — sent to support', rows);
+
+  closeForm();
+}
+
+/* ---------- WHATSAPP ---------- */
 async function openWhatsApp(){
-  if(!roomId) return;
+  if (!roomId) return;
   try {
     const r = await fetch('/api/whatsapp', {
       method: 'POST',
