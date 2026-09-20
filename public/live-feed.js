@@ -1,10 +1,10 @@
-// public/live-feed.js — Sticky trust panel + real events
+// public/live-feed.js — Sticky Live Chat panel + real events + clickable
 
 (function(){
   const TRUST_TITLE = 'Live Chat';
-  const TRUST_MESSAGE = '24/7';
+  const TRUST_MESSAGE = '24/7 · Tap to chat';
   const TRUST_DELAY_MS = 3000;
-  const EVENT_VISIBLE_MS = 6000;   // how long a real event stays before trust returns
+  const EVENT_VISIBLE_MS = 6000;
   const MIN_GAP_MS = 3000;
 
   let lastShownAt = 0;
@@ -19,7 +19,7 @@
     c.id = '__live_feed';
     c.style.cssText =
       'position:fixed;left:16px;bottom:16px;z-index:99998;' +
-      'display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+      'display:flex;flex-direction:column;gap:8px;';
     document.body.appendChild(c);
     return c;
   }
@@ -42,6 +42,29 @@
     document.head.appendChild(style);
   }
 
+  // Tap handler — enters the chat room
+  function goToChat(){
+    // Try the direct start function first
+    if (typeof window.start === 'function') {
+      try {
+        // Fill in defaults if fields are still visible
+        var nameEl = document.getElementById('name');
+        var topicEl = document.getElementById('topic');
+        if (nameEl && !nameEl.value) nameEl.value = 'Guest';
+        if (topicEl && !topicEl.value) topicEl.value = 'General';
+        window.start();
+        return;
+      } catch(e){}
+    }
+    // Fallback: scroll to the start-chat card
+    var card = document.querySelector('.card');
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      var nameEl = document.getElementById('name');
+      if (nameEl) setTimeout(function(){ nameEl.focus(); }, 600);
+    }
+  }
+
   function buildPopup(){
     const c = ensureContainer();
     const el = document.createElement('div');
@@ -50,13 +73,15 @@
       'box-shadow:0 8px 24px rgba(0,0,0,.22);' +
       'font-family:Inter,system-ui,sans-serif;font-size:13.5px;' +
       'max-width:340px;display:flex;align-items:center;gap:10px;' +
+      'cursor:pointer;user-select:none;' +
       'transform:translateY(20px);opacity:0;' +
       'transition:transform .35s ease,opacity .35s ease;';
+    el.addEventListener('click', goToChat);
     c.appendChild(el);
     return el;
   }
 
-  function render(iconHtml, text){
+  function render(iconHtml, text, clickable){
     ensureKeyframes();
     if (!currentPopup) {
       currentPopup = buildPopup();
@@ -66,10 +91,12 @@
       });
     }
     currentPopup.innerHTML = iconHtml + '<span>' + text + '</span>';
+    currentPopup.style.cursor = clickable === false ? 'default' : 'pointer';
+    currentPopup.onclick = clickable === false ? null : goToChat;
   }
 
   function showTrust(){
-    render(liveDot(), '<b>' + TRUST_TITLE + '</b><br>' + TRUST_MESSAGE);
+    render(liveDot(), '<b>' + TRUST_TITLE + '</b><br>' + TRUST_MESSAGE, true);
   }
 
   const EVENT_MAP = {
@@ -88,13 +115,11 @@
     if (!m) return;
     const now = Date.now();
     if (now - lastShownAt < MIN_GAP_MS) {
-      // too soon — queue for later
       setTimeout(() => showEvent(type), MIN_GAP_MS);
       return;
     }
     lastShownAt = now;
-    render(m[0], m[1]);
-    // after a while, revert to the trust panel
+    render(m[0], m[1], true);
     clearTimeout(revertTimer);
     revertTimer = setTimeout(showTrust, EVENT_VISIBLE_MS);
   }
@@ -113,7 +138,6 @@
     }
   };
 
-  // Show trust panel after a short delay, and keep it visible
   setTimeout(() => {
     if (!trustShown) {
       trustShown = true;
