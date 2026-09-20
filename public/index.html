@@ -230,9 +230,9 @@
     border-radius:10px;font-weight:600;cursor:pointer;font-family:inherit;
   }
   @media (max-width:500px){
-    .room-actions button span.lbl{display:none}
-    .room-actions button{font-size:16px}
-  }
+  .room-actions button{font-size:11px;padding:6px 2px;flex-direction:column;gap:2px}
+  .room-actions button span.lbl{font-size:10px;display:block}
+}
 </style>
 </head>
 <body>
@@ -483,11 +483,25 @@ function showChatView(){
   setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
 }
 
+function showChatView(){
+  chatOpen = true;
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('chatView').classList.add('active');
+  document.body.style.overflow = 'hidden';
+  // Hide the live-feed popup while inside the chat
+  var lf = document.getElementById('__live_feed');
+  if (lf) lf.style.display = 'none';
+  setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 50);
+}
+
 function leaveChat(){
   chatOpen = false;
   document.getElementById('chatView').classList.remove('active');
   document.getElementById('homeView').style.display = 'block';
   document.body.style.overflow = '';
+  // Show the live-feed popup again on the homepage
+  var lf = document.getElementById('__live_feed');
+  if (lf) lf.style.display = 'flex';
 }
 
 socket.on('connect', () => {
