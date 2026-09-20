@@ -2,7 +2,7 @@
 
 (function(){
   const TRUST_TITLE = 'Live Chat';
-  const TRUST_MESSAGE = '24/7 ·
+  const TRUST_MESSAGE = '24/7';
   const TRUST_DELAY_MS = 3000;
   const EVENT_VISIBLE_MS = 6000;   // how long a real event stays before trust returns
   const MIN_GAP_MS = 3000;
