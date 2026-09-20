@@ -52,6 +52,37 @@
 
   .typing{font-size:12px;color:var(--muted);font-style:italic;padding:4px 6px;height:18px}
 
+  /* ===== AI SUGGESTION PANEL ===== */
+  .ai-panel{
+    display:none;
+    background:#F0F7FF;
+    border-top:1px solid #D6E6F8;
+    padding:12px 24px;
+    flex-shrink:0;
+  }
+  .ai-panel.show{display:block}
+  .ai-header{
+    display:flex;align-items:center;justify-content:space-between;
+    font-size:12px;font-weight:700;color:var(--primary);
+    margin-bottom:8px;letter-spacing:0.3px;
+  }
+  .ai-header .ai-loading{color:var(--muted);font-weight:500;font-style:italic}
+  .ai-suggestion{
+    background:#fff;border:1px solid #D6E6F8;border-radius:10px;
+    padding:12px 14px;font-size:13.5px;line-height:1.55;color:var(--text);
+    margin-bottom:10px;white-space:pre-wrap;min-height:44px;
+  }
+  .ai-buttons{display:flex;gap:8px;flex-wrap:wrap}
+  .ai-buttons button{
+    border:none;padding:8px 14px;border-radius:8px;font-size:12.5px;
+    font-weight:600;cursor:pointer;font-family:inherit;
+  }
+  .ai-buttons .use{background:var(--primary);color:#fff}
+  .ai-buttons .use:hover{background:var(--primary-dark)}
+  .ai-buttons .regen{background:#EDF2F7;color:var(--primary)}
+  .ai-buttons .regen:hover{background:#DFE8F5}
+  .ai-buttons .dismiss{background:transparent;color:var(--muted);text-decoration:underline}
+
   .composer{padding:16px 24px;background:#fff;border-top:1px solid #E2E8F0;display:flex;gap:8px}
   .composer input{flex:1;padding:12px 14px;border:1px solid #CBD5E0;border-radius:10px;font-size:14px;font-family:inherit}
   .composer button{background:var(--primary);color:#fff;border:none;padding:12px 24px;border-radius:10px;
@@ -97,6 +128,21 @@
   </div>
   <div id="chat"><div class="empty">No conversation selected. Pick a customer from the left.</div></div>
   <div class="typing" id="typingIndicator"></div>
+
+  <!-- AI SUGGESTION PANEL -->
+  <div class="ai-panel" id="aiPanel">
+    <div class="ai-header">
+      <span>💡 AI SUGGESTION</span>
+      <span class="ai-loading" id="aiLoading">Thinking…</span>
+    </div>
+    <div class="ai-suggestion" id="aiSuggestion"></div>
+    <div class="ai-buttons">
+      <button class="use" onclick="useSuggestion()">Use this</button>
+      <button class="regen" onclick="regenerateSuggestion()">Regenerate</button>
+      <button class="dismiss" onclick="dismissSuggestion()">Dismiss</button>
+    </div>
+  </div>
+
   <div class="composer">
     <input id="msg" placeholder="Reply to this customer… (type /wa to invite to WhatsApp)" onkeydown="if(event.key==='Enter')send()">
     <button onclick="send()">Send</button>
@@ -116,6 +162,8 @@ const socket = io({
 
 let activeRoom = null;
 let customers = [];
+let currentSuggestion = '';
+let suggestionTimer = null;
 const inputEl = document.getElementById('msg');
 
 socket.on('connect', () => {
@@ -169,6 +217,7 @@ function openChat(c){
     escapeHtml(c.name) + ' <span>— ' + escapeHtml(c.topic || 'General') + '</span>';
   document.getElementById('chat').innerHTML = '';
   document.getElementById('typingIndicator').textContent = '';
+  dismissSuggestion();
   refresh();
 }
 
@@ -181,6 +230,14 @@ socket.on('chat:history', ({ messages }) => {
 socket.on('chat:message', (m) => {
   renderMsg(m);
   document.getElementById('typingIndicator').textContent = '';
+
+  if (m.from === 'customer') {
+    const isActive = (activeRoom && m.roomId === activeRoom);
+    if (isActive && !m.structured) {
+      // Only auto-suggest for regular text messages, not structured requests
+      requestSuggestion();
+    }
+  }
 });
 
 function renderMsg(m){
@@ -221,6 +278,57 @@ socket.on('typing:stop', ({ from }) => {
   }
 });
 
+/* ===== AI SUGGESTION ===== */
+function showAiPanel(loading){
+  document.getElementById('aiPanel').classList.add('show');
+  document.getElementById('aiLoading').textContent = loading ? 'Thinking…' : '';
+  document.getElementById('aiSuggestion').textContent = loading ? '' : currentSuggestion;
+}
+
+function dismissSuggestion(){
+  currentSuggestion = '';
+  document.getElementById('aiPanel').classList.remove('show');
+  if (suggestionTimer) { clearTimeout(suggestionTimer); suggestionTimer = null; }
+}
+
+async function requestSuggestion(){
+  if (!activeRoom) return;
+  // debounce — wait 1.2s after last customer message
+  if (suggestionTimer) clearTimeout(suggestionTimer);
+  suggestionTimer = setTimeout(async () => {
+    showAiPanel(true);
+    try {
+      const r = await fetch('/api/ai-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId: activeRoom })
+      });
+      const data = await r.json();
+      if (data.ok && data.suggestion) {
+        currentSuggestion = data.suggestion;
+        showAiPanel(false);
+      } else {
+        dismissSuggestion();
+      }
+    } catch(e) {
+      dismissSuggestion();
+    }
+  }, 1200);
+}
+
+function regenerateSuggestion(){
+  if (!activeRoom) return;
+  requestSuggestion();
+}
+
+function useSuggestion(){
+  if (!currentSuggestion || !inputEl) return;
+  inputEl.value = currentSuggestion;
+  inputEl.focus();
+  dismissSuggestion();
+}
+
+/* ===== SEND ===== */
 function send(){
   const text = inputEl.value.trim();
   if(!text || !activeRoom) return;
@@ -234,6 +342,7 @@ function send(){
   socket.emit('chat:message', { roomId: activeRoom, text, from: 'agent' });
   socket.emit('typing:stop', { roomId: activeRoom, from: 'agent' });
   inputEl.value = '';
+  dismissSuggestion();
 }
 
 function inviteWhatsApp(){
@@ -250,6 +359,7 @@ function endChat(){
   document.getElementById('chat').innerHTML = '<div class="empty">No conversation selected. Pick a customer from the left.</div>';
   document.getElementById('title').innerHTML = 'Select a conversation <span>— nothing selected</span>';
   document.getElementById('typingIndicator').textContent = '';
+  dismissSuggestion();
   refresh();
 }
 
